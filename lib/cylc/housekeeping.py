@@ -48,7 +48,7 @@ class config_line:
     def __init__( self, source, match, oper, ctime, offset, dest=None, 
             verbose=False, debug=False, mode=None, cheap=False ):
         self.source = source
-        self.match = match
+        self.match = os.path.expandvars(match)
         self.ctime = ctime
         try:
             # check the validity of the base cycle time
@@ -109,10 +109,23 @@ class config_line:
         foo.decrement( hours=self.offset )
         print "CUTOFF:", self.ctime, '-', self.offset, '=', foo.get()
         batch = batchproc( batchsize, verbose=self.verbose )
-        for entry in os.listdir( self.source ):
+
+        entries=[]
+        if re.search( '/\w+', self.match ):
+            for root, dirs, files in os.walk( self.source ):
+                for name in files:
+                    entries.append( os.path.join( root, name ) )
+
+                for name in dirs:
+                    entries.append( os.path.join( root, name ) )
+
+        else:
+            for name in os.listdir( self.source ): 
+                entries.append( os.path.join( self.source, name ) )
+
+        for entry in entries:
             src_entries += 1
-            entrypath = os.path.join( self.source, entry )
-            item = hkitem( entrypath, self.match, self.opern, self.ctime, self.offset, 
+            item = hkitem( entry, self.match, self.opern, self.ctime, self.offset, 
                     self.destn, self.mode, self.debug, self.cheap )
             if not item.matches():
                 not_matched += 1
