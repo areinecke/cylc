@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,14 +19,29 @@
 import os, sys, re
 
 from OrderedDict import OrderedDict
-from cylc.include_files import inline, IncludeFileError
+from include import inline, IncludeFileNotFoundError
+from util import itemstr
+import cylc.flags
 
 """
-Module to parse a cylc parsec config file into a nested ordered dict.
+parsec config file parsing:
+
+ 1) inline include-files
+ 2) process with Jinja2
+ 3) join continuation lines
+ 4) parse items into a nested ordered dict
+    * line-comments and blank lines are skipped
+    * trailing comments are stripped from section headings
+    * item value processing:
+      - original quoting is retained
+      - trailing comments are retained
+      (distinguishing between strings and string lists, with all quoting
+      and commenting options, is easier during validation when the item
+      value type is known).
 """
 
 try:
-    from cylc.Jinja2Support import Jinja2Process, TemplateError, TemplateSyntaxError
+    from Jinja2Support import Jinja2Process, TemplateError, TemplateSyntaxError
 except ImportError:
     jinja2_disabled = True
 else:
@@ -37,10 +52,12 @@ else:
 # checked later in config.py.
 _HEADING = re.compile(r'''^
     (\s*)                     # 1: indentation
-    ((?:\[\s*)+)              # 2: section marker open
+    ((?:\[)+)                 # 2: section marker open
+    \s*
     (.+?)                     # 3: section name
-    ((?:\s*\])+)              # 4: section marker close
-    \s*(\#.*)?                # 5: optional comment
+    \s*
+    ((?:\])+)                 # 4: section marker close
+    \s*(\#.*)?                # 5: optional trailing comment
     $''',
     re.VERBOSE)
 
@@ -53,59 +70,14 @@ _KEY_VALUE = re.compile(r'''^
     ''',
     re.VERBOSE)
 
-# single-quoted value and trailing string (checked for comment below)
-
-# BROKEN: CANNOT HAVE BACKREFERENCE IN CHARACTER CLASS []
-BROKEN_SQ_VALUE = re.compile( 
-r"""
-    ('|")            # 1: opening quote
-    (                # 2: string contents
-      [^\1\\]*            # zero or more non-quote, non-backslash
-      (?:                 # "unroll-the-loop"!
-        \\.               # allow escaped anything.
-        [^\1\\]*          # zero or more non-quote, non-backslash
-      )*                  # finish {(special normal*)*} construct.
-    )                     # end string contents.
-    \1             # 3: closing quote
-    (?:\s*\#.*)?$    # optional trailing comment
-    """, re.VERBOSE )
-
-_SQ_VALUE = re.compile( 
-r"""
-    (?:'            # opening quote
-    (                # 1: string contents
-      [^'\\]*            # zero or more non-quote, non-backslash
-      (?:                 # "unroll-the-loop"!
-        \\.               # allow escaped anything.
-        [^'\\]*          # zero or more non-quote, non-backslash
-      )*                  # finish {(special normal*)*} construct.
-    )                     # end string contents.
-    ')             # closing quote
-    (?:\s*(?:\#.*)?)?$    # optional trailing comment
-    """, re.VERBOSE )
-
-_DQ_VALUE = re.compile( 
-r"""
-    (?:"            # opening quote
-    (                # 1: string contents
-      [^"\\]*            # zero or more non-quote, non-backslash
-      (?:                 # "unroll-the-loop"!
-        \\.               # allow escaped anything.
-        [^"\\]*          # zero or more non-quote, non-backslash
-      )*                  # finish {(special normal*)*} construct.
-    )                     # end string contents.
-    ")             # closing quote
-    (?:\s*(?:\#.*)?)?$    # optional trailing comment
-    """, re.VERBOSE )
-
-
-# unquoted value with optional trailing comment
-_UQ_VALUE = re.compile( '^(.*?)(\s*\#.*)?$' )
+# quoted value regex reference:
+#   http://stackoverflow.com/questions/5452655/
+#       python-regex-to-match-text-in-single-quotes-ignoring-escaped-quotes-and-tabs-n
 
 _LINECOMMENT = re.compile( '^\s*#' )
 _BLANKLINE = re.compile( '^\s*$' )
 
-# regexes for finding triple quoted values on one line
+# triple quoted values on one line
 _SINGLE_LINE_SINGLE = re.compile(r"^'''(.*?)'''\s*(#.*)?$")
 _SINGLE_LINE_DOUBLE = re.compile(r'^"""(.*?)"""\s*(#.*)?$')
 _MULTI_LINE_SINGLE = re.compile(r"^(.*?)'''\s*(#.*)?$")
@@ -116,16 +88,22 @@ _TRIPLE_QUOTE = {
     '"""': (_SINGLE_LINE_DOUBLE, _MULTI_LINE_DOUBLE),
 }
 
-
 class ParseError( Exception ):
-    def __init__( self, msg ):
-        self.msg = msg
+    def __init__( self, reason, index=None, line=None ):
+        self.msg = "ParseError: " + reason
+        if index:
+            self.msg += " (line " + str(index+1) + ")"
+        if line:
+            self.msg += ":\n   " + line.strip()
+        if index:
+            # TODO - make 'view' function independent of cylc:
+            self.msg += "\n(line numbers match 'cylc view -p')"
     def __str__( self ):
-        return repr(self.msg)
+        return self.msg
 
 class FileNotFoundError( ParseError ):
     pass
- 
+
 def _concatenate( lines ):
     """concatenate continuation lines"""
     index = 0
@@ -145,63 +123,68 @@ def _concatenate( lines ):
         index +=1
     return clines
 
-def _single_unquote(value):
-    """Return an unquoted version of a single-quoted value"""
-    if (value[0] == value[-1]) and (value[0] in ('"', "'")):
-        value = value[1:-1]
-    return value
-
-def addsect( cfig, sname, parents, verbose ):
+def addsect( cfig, sname, parents ):
     """Add a new section to a nested dict."""
     for p in parents:
         # drop down the parent list
         cfig = cfig[p]
     if sname in cfig:
         # this doesn't warrant a warning unless contained items are repeated
-        if verbose:
-            print 'Section [' + ']['.join(parents + [sname]) + '] already encountered'
+        if cylc.flags.verbose:
+            print 'Section already encountered: ' + itemstr( parents + [sname] )
     else:
         cfig[sname] = OrderedDict()
 
-def addict( cfig, key, val, parents, verbose ):
+def addict( cfig, key, val, parents, index ):
     """Add a new [parents...]key=value pair to a nested dict."""
     for p in parents:
         # drop down the parent list
         cfig = cfig[p]
+
+    if not isinstance( cfig, dict ):
+        # an item of this name has already been encountered at this level
+        print >> sys.stderr, itemstr( parents, key, val )
+        raise ParseError( 'ERROR line ' + str(index) + ': already encountered ' + itemstr( parents ))
+
     if key in cfig:
-        # already defined - ok for graph strings
-        if key == 'graph' and set(parents[:-1]) == set(['scheduling','dependencies']):
-            try:
-                cfig[key] += '\n' + val
-            except IndexError:
-                # no graph string
-                pass
-            else:
-                if verbose:
-                    print 'Merging graph strings under [' + ']['.join(parents) + ']'
+        # this item already exists
+        if key == 'graph' and \
+                ( len( parents ) == 2 and parents == ['scheduling','dependencies'] or \
+                len( parents ) == 3 and parents[-3:-1] == ['scheduling','dependencies'] ):
+            # append the new graph string to the existing one
+           if cylc.flags.verbose:
+               print 'Merging graph strings under ' + itemstr( parents )
+           if not isinstance( cfig[key], list ):
+               cfig[key] = [cfig[key]]
+           cfig[key].append(val)
         else:
-            if verbose:
-                print >> sys.stderr, 'WARNING: overriding [' + ']['.join(parents) + ']' + key
+            # otherwise override the existing item
+            if cylc.flags.verbose:
+                print >> sys.stderr, 'WARNING: overriding ' + itemstr( parents, key )
                 print >> sys.stderr, ' old value: ' + cfig[key]
                 print >> sys.stderr, ' new value: ' + val
             cfig[key] = val
     else:
         cfig[key] = val
 
+
 def multiline( flines, value, index, maxline ):
     """Consume lines for multiline strings."""
     o_index = index
     quot = value[:3]
     newvalue = value[3:]
+
     # could be a triple-quoted single line:
     single_line = _TRIPLE_QUOTE[quot][0]
     multi_line = _TRIPLE_QUOTE[quot][1]
     mat = single_line.match(value)
-    if mat is not None:
+    if mat:
         val, comment = list(mat.groups())
-        return val, index
+        return value, index
     elif newvalue.find(quot) != -1:
-        raise ParseError('Unbalanced quote problem near line ' + str(o_index+1) + ' ?')
+        # TODO - this should be handled by validation?:
+        # e.g. non-comment follows single-line triple-quoted string
+        raise ParseError( 'Invalid line', o_index, flines[index] )
 
     while index < maxline:
         index += 1
@@ -213,18 +196,17 @@ def multiline( flines, value, index, maxline ):
             # end of multiline, process it
             break
     else:
-        # we've got to the end of the config, oops...
-        raise ParseError( 'Multiline string at ' + str(o_index+1) + ' hit EOF' )
+        raise ParseError( 'Multiline string not closed', o_index, flines[o_index] )
+
     mat = multi_line.match(line)
-    if mat is None:
-        # a badly formed line
-        print >> sys.stderr, line
-        raise ParseError( 'Badly formed line at ' + str(o_index+1) + '?')
-    value, comment = mat.groups()
-    return newvalue + value, index
+    if not mat:
+        # e.g. end multi-line string followed by a non-comment
+        raise ParseError( 'Invalid line', o_index, line )
 
+    #value, comment = mat.groups()
+    return quot + newvalue + line, index
 
-def read_and_proc( fpath, verbose=False, template_vars=[], template_vars_file=None, viewcfg=None ):
+def read_and_proc( fpath, template_vars=[], template_vars_file=None, viewcfg=None, asedit=False ):
     """
     Read a cylc parsec config file (at fpath), inline any include files,
     process with Jinja2, and concatenate continuation lines.
@@ -234,13 +216,12 @@ def read_and_proc( fpath, verbose=False, template_vars=[], template_vars_file=No
     if not os.path.isfile( fpath ):
         raise FileNotFoundError, 'File not found: ' + fpath
 
-    if verbose:
+    if cylc.flags.verbose:
         print "Reading file", fpath
 
     # read the file into a list, stripping newlines
-    f = open( fpath, 'r' )
-    flines = [ line.rstrip('\n') for line in f ]
-    f.close()
+    with open( fpath ) as f:
+        flines = [ line.rstrip('\n') for line in f ]
 
     fdir = os.path.dirname(fpath)
 
@@ -258,8 +239,8 @@ def read_and_proc( fpath, verbose=False, template_vars=[], template_vars_file=No
     # inline any cylc include-files
     if do_inline:
         try:
-            flines = inline( flines, fdir, False, viewcfg=viewcfg )
-        except IncludeFileError, x:
+            flines = inline( flines, fdir, fpath, False, viewcfg=viewcfg, for_edit=asedit )
+        except IncludeFileNotFoundError, x:
             raise ParseError( str(x) )
 
     # process with Jinja2
@@ -267,42 +248,43 @@ def read_and_proc( fpath, verbose=False, template_vars=[], template_vars_file=No
         if flines and re.match( '^#![jJ]inja2\s*', flines[0] ):
             if jinja2_disabled:
                 raise ParseError( 'Jinja2 is not installed' )
-            if verbose:
+            if cylc.flags.verbose:
                 print "Processing with Jinja2"
             try:
                 flines = Jinja2Process( flines, fdir,
-                        template_vars, template_vars_file, verbose )
+                        template_vars, template_vars_file )
             except TemplateSyntaxError, x:
                 lineno = x.lineno + 1  # (flines array starts from 0)
-                print >> sys.stderr, 'Jinja2 Template Syntax Error, line', lineno
-                print >> sys.stderr, flines[x.lineno]
-                raise ParseError(str(x))
+                msg = "Jinja2 Syntax Error (line " + str(lineno) + ")"
+                msg += "\n   " + flines[x.lineno].strip()
+                # TODO - make "view" function independent of cylc:
+                msg += "\n(line numbers match 'cylc view -i')"
+                raise ParseError(msg)
             except TemplateError, x:
-                print >> sys.stderr, 'Jinja2 Template Error'
-                raise ParseError(x)
+                print >> sys.stderr, 'Jinja2 Template Error:', x
+                raise ParseError(repr(x))
             except TypeError, x:
-                print >> sys.stderr, 'Jinja2 Type Error'
-                raise ParseError(x)
+                print >> sys.stderr, 'Jinja2 Type Error:', x
+                raise ParseError(repr(x))
 
     # concatenate continuation lines
     if do_contin:
         flines = _concatenate( flines )
 
-    return flines
+    # return rstripped lines
+    return [ fl.rstrip() for fl in flines ]
 
-def parse( fpath, verbose=False, write_processed_file=False, 
+def parse( fpath, write_proc=False,
         template_vars=[], template_vars_file=None ):
-    """
-    Parse a nested config file and return a corresponding nested dict.
-    """
+    "Parse file items line-by-line into a corresponding nested dict."
+
     # read and process the file (jinja2, include-files, line continuation)
-    flines = read_and_proc( fpath, verbose, 
-            template_vars, template_vars_file )
+    flines = read_and_proc( fpath, template_vars, template_vars_file )
     # write the processed for suite.rc if it lives in a writable directory
-    if write_processed_file and \
+    if write_proc and \
             os.access(os.path.dirname(fpath), os.W_OK):
         fpath_processed = fpath + '.processed'
-        if verbose:
+        if cylc.flags.verbose:
             print "Writing file " + fpath_processed
         f = open( fpath_processed, 'w' )
         f.write('\n'.join(flines))
@@ -316,7 +298,6 @@ def parse( fpath, verbose=False, write_processed_file=False,
     maxline = len(flines)-1
     index = -1
 
-    # parse file lines one-by-one
     while index < maxline:
         index += 1
         line = flines[index]
@@ -333,13 +314,10 @@ def parse( fpath, verbose=False, write_processed_file=False,
         if m:
             # matched a section heading
             indent, s_open, sect_name, s_close, comment = m.groups()
-            s_open = s_open.strip()
-            s_close = s_close.strip()
             nb = len(s_open)
 
             if nb != len(s_close):
-                print >> sys.stderr, line
-                raise ParseError('Section bracket mismatch, line ' + str(index+1))
+                raise ParseError('bracket mismatch', index, line )
             elif nb == nesting_level:
                 # sibling section
                 parents = parents[:-1] + [sect_name]
@@ -351,10 +329,9 @@ def parse( fpath, verbose=False, write_processed_file=False,
                 ndif = nesting_level -nb
                 parents = parents[:-ndif-1] + [sect_name]
             else:
-                print >> sys.stderr, line
-                raise ParseError( 'Section nesting error, line ' + str(index+1))
+                raise ParseError( 'Error line ' + str(index+1) + ': ' + line )
             nesting_level = nb
-            addsect( config, sect_name, parents[:-1], verbose )
+            addsect( config, sect_name, parents[:-1] )
 
         else:
             m = re.match( _KEY_VALUE, line )
@@ -364,49 +341,10 @@ def parse( fpath, verbose=False, write_processed_file=False,
                 if val.startswith('"""') or val.startswith("'''"):
                     # triple quoted - may be a multiline value
                     val, index = multiline( flines, val, index, maxline )
-                else:
-                    m = re.match( _SQ_VALUE, val )
-                    if m:
-                        # single quoted value: unquote and strip comment
-                        val = m.groups()[0]
-                        #print 'SINGLE      ', key, ' = ', val
-                    else:
-                        m = re.match( _DQ_VALUE, val )
-                        if m:
-                            # double quoted value: unquote and strip comment
-                            val = m.groups()[0]
-                            #print 'DOUBLE      ', key, ' = ', val
-                        elif val.startswith("'") or val.startswith('"'):
-                            # must be a quoted list: unquote and strip comment
-                            #print 'QUOTED LIST ', key, ' = ', val
-                            if val[0] == "'":
-                                reg = _SQ_VALUE
-                            else:
-                                reg = _DQ_VALUE
-                            vals = re.split( '\s*,\s*', val )
-                            if len(vals) == 1:
-                                # not a list
-                                print >> sys.stderr, line
-                                raise ParseError( 'Invalid line at ' + str(index+1) )
-                            val = ''
-                            for v in vals:
-                                m = re.match(reg, v)
-                                if m:
-                                    val += m.groups()[0] + ','
-                            val = val.rstrip(',')
-                        else:
-                            m = re.match( _UQ_VALUE, val )
-                            if m:
-                                # unquoted value: strip comment
-                                val = m.groups()[0]
-                                #print 'UNQUOTED    ', key, ' = ', val
-                            else:
-                                print >> sys.stderr, line
-                                raise ParseError( 'Invalid line at ' + str(index+1) )
-                addict( config, key, val, parents, verbose )
+                addict( config, key, val, parents, index )
             else:
                 # no match
-                print >> sys.stderr, line
-                raise ParseError( 'Invalid line at ' + str(index+1) )
+                raise ParseError( 'Invalid line ' + str(index+1) + ': ' + line )
+
     return config
 

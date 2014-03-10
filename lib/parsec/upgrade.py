@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ if __name__ == '__main__':
     sys.path.append( here + '/..' )
 
 from OrderedDict import OrderedDict
+import cylc.flags
 
 """Support automatic deprecation and obsoletion of parsec config items."""
 
@@ -45,12 +46,10 @@ class converter( object ):
 class upgrader( object ):
     """Handles upgrading of deprecated config values."""
 
-    def __init__( self, cfg, spec, descr, verbose=True ):
+    def __init__( self, cfg, descr ):
         """Store the config dict to be upgraded if necessary."""
         self.cfg = cfg
-        self.spec = spec
         self.descr = descr
-        self.verbose = verbose
         # upgrades must be ordered in case several act on the same item
         self.upgrades = OrderedDict()
 
@@ -59,11 +58,11 @@ class upgrader( object ):
             self.upgrades[vn] = []
         if cvtr is None:
             cvtr = converter( lambda x: x, "value unchanged" ) # identity
-        self.upgrades[vn].append( 
+        self.upgrades[vn].append(
                 {
                     'old' : oldkeys,
                     'new' : newkeys,
-                    'cvt' : cvtr 
+                    'cvt' : cvtr
                     }
                 )
 
@@ -71,11 +70,11 @@ class upgrader( object ):
         if vn not in self.upgrades:
             self.upgrades[vn] = []
         cvtr = converter( lambda x: x, "DELETED (OBSOLETE)" ) # identity
-        self.upgrades[vn].append( 
+        self.upgrades[vn].append(
                 {
                     'old' : oldkeys,
                     'new' : newkeys,
-                    'cvt' : cvtr 
+                    'cvt' : cvtr
                     }
                 )
 
@@ -89,7 +88,7 @@ class upgrader( object ):
         item = self.cfg
         for key in keys[:-1]:
             if key not in item:
-                item[key] = {} 
+                item[key] = {}
             item = item[key]
         item[keys[-1]] = val
 
@@ -120,7 +119,7 @@ class upgrader( object ):
             if k == "__MANY__":
                 pre = okeys[:i]
                 post = okeys[i+1:]
-                tmp = self.spec
+                tmp = self.cfg
                 for j in pre:
                     tmp = tmp[j]
                 many = tmp.keys()
@@ -154,7 +153,12 @@ class upgrader( object ):
             warnings[vn] = []
 
             for u in upgs:
-                for upg in self.expand(u):
+                try:
+                    exp = self.expand(u)
+                except:
+                    continue
+
+                for upg in exp:
                     try:
                         old = self.get_item( upg['old'] )
                     except:
@@ -172,12 +176,11 @@ class upgrader( object ):
                         self.del_item( upg['old'] )
                         if upg['cvt'].describe() != "DELETED (OBSOLETE)":
                             self.put_item( upg['new'], upg['cvt'].convert(old) )
-        if do_warn and self.verbose:
+        if do_warn and cylc.flags.verbose:
             print >> sys.stderr, "WARNING: deprecated items were automatically upgraded in '" + self.descr + "':"
             for vn,msgs in warnings.items():
                 for m in msgs:
                     print >> sys.stderr, " * (" + vn + ")", m
-
 
 if __name__ == "__main__":
     from util import printcfg
@@ -190,7 +193,7 @@ if __name__ == "__main__":
                 'abc' : 5,
                 'cde' : 'foo',
                 },
-            'hostnames' : 
+            'hostnames' :
             {
                 'host 1' :
                 {

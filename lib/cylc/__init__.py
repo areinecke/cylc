@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -32,22 +32,23 @@ def environ_init(argv0=None):
     # BAZ=$(python -c 'from cylc.foo import bar; print bar')
     # where argv0 will be '-c'.
 
-    cylc_dir = os.path.dirname(os.path.dirname(os.path.realpath(os.path.abspath(argv0))))
-    if cylc_dir != os.getenv('CYLC_DIR', ''):
-        os.environ['CYLC_DIR'] = cylc_dir
+    if argv0 and argv0 != "-":
+        cylc_dir = os.path.dirname(os.path.dirname(os.path.realpath(argv0)))
+        if cylc_dir != os.getenv('CYLC_DIR', ''):
+            os.environ['CYLC_DIR'] = cylc_dir
 
-    dirs = [os.path.join(cylc_dir, 'util'), os.path.join(cylc_dir, 'bin')]
-    if os.getenv('CYLC_SUITE_DEF_PATH', ''):
-        dirs.append(os.getenv('CYLC_SUITE_DEF_PATH'))
-    environ_path_add(dirs)
-    environ_path_add([os.path.join(cylc_dir, 'lib')], 'PYTHONPATH')
+        dirs = [os.path.join(cylc_dir, 'util'), os.path.join(cylc_dir, 'bin')]
+        if os.getenv('CYLC_SUITE_DEF_PATH', ''):
+            dirs.append(os.getenv('CYLC_SUITE_DEF_PATH'))
+        environ_path_add(dirs)
+        environ_path_add([os.path.join(cylc_dir, 'lib')], 'PYTHONPATH')
 
     # Python output buffering delays appearance of stdout and stderr
     # when output is not directed to a terminal (this occurred when
     # running pre-5.0 cylc via the posix nohup command; is it still the
     # case in post-5.0 daemon-mode cylc?)
     os.environ['PYTHONUNBUFFERED'] = 'true'
-    
+
     # Export $HOSTNAME for use in the default lockserver config (see
     # $CYLC_DIR/conf/lockserver.conf). HOSTNAME is a bash variable (see
     # man bash) that is defined but not exported; in other shells it may

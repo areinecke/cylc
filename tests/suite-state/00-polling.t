@@ -1,6 +1,6 @@
 #!/bin/bash
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C: 
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -23,13 +23,13 @@
 set_test_number 3
 #-------------------------------------------------------------------------------
 install_suite $TEST_NAME_BASE polling
-
 #-------------------------------------------------------------------------------
 # copy the upstream suite to the test directory and register it
 cp -r $TEST_SOURCE_DIR/upstream $TEST_DIR/
-UPSTREAM=${SUITE_NAME}-upstream 
+# use full range of characters in the suite-to-be-polled name:
+UPSTREAM=${SUITE_NAME}-up_stre.am
+cylc unreg $UPSTREAM
 cylc reg $UPSTREAM $TEST_DIR/upstream
-
 #-------------------------------------------------------------------------------
 # validate both suites as tests
 TEST_NAME=$TEST_NAME_BASE-validate-upstream

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -22,9 +22,18 @@
 # task changes state in such a way that others could be affected. The
 # flag should only be turned off again after use in scheduler.py, to
 # ensure that dependency negotation occurs when required.
-pflag = False 
+pflag = False
 
 # Set iflag = True to simulate an update of the suite state summary
 # structure accessed by gcylc and commands.
 iflag = False
+
+# verbose mode
+verbose = False
+
+# debug mode
+debug = False
+
+# utc mode
+utc = False
 

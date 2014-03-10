@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -32,10 +32,10 @@ class TaskStateError( Exception ):
 class task_state(object):
 
     legal = [ 'waiting',
-              'runahead', 
+              'runahead',
               'held',
               'queued',
-              'submitting',
+              'ready',
               'submitted',
               'submit-failed',
               'submit-retrying',
@@ -52,7 +52,7 @@ class task_state(object):
     labels = {
             'waiting'    : '_waiting',
             'queued'     : '_queued',
-            'submitting' : 'su_bmitting',
+            'ready'      : 'rea_dy',
             'submitted'  : 'sub_mitted',
             'submit-failed' : 'submit-f_ailed',
             'submit-retrying' : 'submit-retryin_g',
@@ -67,7 +67,7 @@ class task_state(object):
     ctrl = {
             'waiting'    : "\033[1;36m",
             'queued'     : "\033[1;38;44m",
-            'submitting' : "\033[1;32m",
+            'ready'      : "\033[1;32m",
             'submitted'  : "\033[1;33m",
             'submit-failed' : "\033[1;34m",
             'submit-retrying'   : "\033[1;31m",
@@ -151,7 +151,7 @@ class task_state(object):
 
         if self.__class__.is_legal(input):
             state[ 'status' ] = input
-            # ASSUME THAT ONLY succeeded TASKS, AT STARTUP, HAVE spawned 
+            # ASSUME THAT ONLY succeeded TASKS, AT STARTUP, HAVE spawned
             # (in fact this will only be used to start tasks in 'waiting')
             if input == 'succeeded':
                 state[ 'spawned' ] = 'true'
@@ -166,7 +166,7 @@ class task_state(object):
                 if item not in [ 'status', 'spawned' ]:
                     raise TaskStateError, 'ERROR, illegal task status key: ' + item
                 if item == 'status' :
-                    if not self.__class__.is_legal( value ): 
+                    if not self.__class__.is_legal( value ):
                         raise TaskStateError, 'ERROR, illegal task state: ' + value
                 elif item == 'spawned' :
                     if value not in [ 'true', 'false' ]:

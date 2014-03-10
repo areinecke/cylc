@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -30,8 +30,8 @@ import gobject
 #import pygtk
 #pygtk.require('2.0')
 
-from cylc.global_config import get_global_cfg
-from cylc.gui.gcylc_config import config
+from cylc.cfgspec.site import sitecfg
+from cylc.cfgspec.gcylc import gcfg
 from cylc.gui.legend import ThemeLegendWindow
 from cylc.gui.SuiteControl import run_get_stdout
 from cylc.gui.DotMaker import DotMaker
@@ -92,7 +92,7 @@ def get_status_tasks(host, suite, owner=None):
 
 
 def get_summary_menu(suite_host_tuples,
-                     usercfg, theme_name, set_theme_func,
+                     theme_name, set_theme_func,
                      has_stopped_suites, clear_stopped_suites_func,
                      scanned_hosts, change_hosts_func,
                      update_now_func, start_func,
@@ -101,7 +101,6 @@ def get_summary_menu(suite_host_tuples,
     """Return a right click menu for summary GUIs.
 
     suite_host_tuples should be a list of (suite, host) tuples (if any).
-    usercfg should be the gcylc config object.
     theme_name should be the name of the current theme.
     set_theme_func should be a function accepting a new theme name.
     has_stopped_suites should be a boolean denoting currently
@@ -174,7 +173,7 @@ def get_summary_menu(suite_host_tuples,
     theme_items[theme] = gtk.RadioMenuItem(label=theme)
     thememenu.append(theme_items[theme])
     theme_items[theme].theme_name = theme
-    for theme in usercfg['themes']:
+    for theme in gcfg.get( ['themes'] ):
         if theme == "default":
             continue
         theme_items[theme] = gtk.RadioMenuItem(group=theme_items['default'], label=theme)
@@ -183,7 +182,7 @@ def get_summary_menu(suite_host_tuples,
 
     # set_active then connect, to avoid causing an unnecessary toggle now.
     theme_items[theme_name].set_active(True)
-    for theme in usercfg['themes']:
+    for theme in gcfg.get( ['themes'] ):
         theme_items[theme].show()
         theme_items[theme].connect('toggled',
                                    lambda i: (i.get_active() and
@@ -195,12 +194,12 @@ def get_summary_menu(suite_host_tuples,
     theme_legend_item.set_sensitive(not is_stopped)
     theme_legend_item.connect("button-press-event",
                               lambda b, e: launch_theme_legend(
-                                        usercfg['themes'][theme_name]))
+                                        gcfg.get( ['themes',theme_name])))
     menu.append(theme_legend_item)
     sep_item = gtk.SeparatorMenuItem()
     sep_item.show()
     menu.append(sep_item)
-    
+
     # Construct a trigger update item.
     update_now_item = gtk.ImageMenuItem("Update Now")
     img = gtk.image_new_from_stock(gtk.STOCK_REFRESH, gtk.ICON_SIZE_MENU)
@@ -260,7 +259,7 @@ def launch_about_dialog(program_name, hosts):
         comments_text = program_name + "\n" + hosts_text
 
     about.set_version(cylc_version)
-    about.set_copyright("Copyright (C) 2008-2013 Hilary Oliver, NIWA")
+    about.set_copyright("Copyright (C) 2008-2014 Hilary Oliver, NIWA")
     about.set_comments(comments_text)
     about.set_icon(get_icon())
     about.run()
@@ -339,9 +338,8 @@ class SummaryApp(object):
         set_exception_hook_dialog("cylc gsummary")
         setup_icons()
         if not hosts:
-            gcfg = get_global_cfg()
             try:
-                hosts = gcfg.cfg["suite host scanning"]["hosts"]
+                hosts = sitecfg.get( ["suite host scanning","hosts"] )
             except KeyError:
                 hosts = ["localhost"]
         self.hosts = hosts
@@ -353,9 +351,10 @@ class SummaryApp(object):
         self.window.set_icon(get_icon())
         self.vbox = gtk.VBox()
         self.vbox.show()
-        self.usercfg = config().cfg
-        self.theme_name = self.usercfg['use theme'] 
-        self.theme = self.usercfg['themes'][self.theme_name]
+
+        self.theme_name = gcfg.get( ['use theme'] )
+        self.theme = gcfg.get( ['themes', self.theme_name] )
+
         self.dots = DotMaker(self.theme)
         suite_treemodel = gtk.TreeStore(*([str, str, bool, str, int] +
             [str] * 20))
@@ -370,7 +369,7 @@ class SummaryApp(object):
                   cell_text_host, self._set_cell_text_host)
         host_name_column.set_sort_column_id(0)
         host_name_column.set_visible(False)
-        
+
         # Construct the suite name column.
         suite_name_column = gtk.TreeViewColumn("Suite")
         cell_text_name = gtk.CellRendererText()
@@ -405,7 +404,7 @@ class SummaryApp(object):
             status_column.pack_start(cell_pixbuf_state, expand=False)
             status_column.set_cell_data_func(
                    cell_pixbuf_state, self._set_cell_pixbuf_state, i)
-        
+
         self.suite_treeview.append_column(host_name_column)
         self.suite_treeview.append_column(suite_name_column)
         self.suite_treeview.append_column(suite_title_column)
@@ -451,13 +450,13 @@ class SummaryApp(object):
         y = int(event.y)
         time = event.time
         pth = treeview.get_path_at_pos(x, y)
-        
+
         suite_host_tuples = []
 
         if pth is not None:
             # Add a gcylc launcher item.
             path, col, cellx, celly = pth
-            
+
             iter_ = treemodel.get_iter(path)
             host, suite = treemodel.get(iter_, 0, 1)
             suite_host_tuples.append((suite, host))
@@ -486,7 +485,6 @@ class SummaryApp(object):
             view_menu.append(column_item)
 
         menu = get_summary_menu(suite_host_tuples,
-                                self.usercfg,
                                 self.theme_name,
                                 self._set_theme,
                                 has_stopped_suites,
@@ -520,7 +518,7 @@ class SummaryApp(object):
         host = model.get_value(iter_, 0)
         suite = model.get_value(iter_, 1)
         update_time = model.get_value(iter_, 4)
-        
+
         location_id = (host, suite, update_time, column.get_title())
         if location_id != self._prev_tooltip_location_id:
             self._prev_tooltip_location_id = location_id
@@ -594,7 +592,7 @@ class SummaryApp(object):
 
     def _set_theme(self, new_theme_name):
         self.theme_name = new_theme_name
-        self.theme = self.usercfg['themes'][self.theme_name]
+        self.theme = gcfg.get( ['themes',self.theme_name] )
         self.dots = DotMaker(self.theme)
 
     def _set_tooltip(self, widget, text):
@@ -656,7 +654,7 @@ class BaseSummaryUpdater(threading.Thread):
             for (host, suite) in list(self.prev_suites):
                 if host not in self.hosts:
                     self.prev_suites.remove((host, suite))
-                    
+
             # Get new information.
             statuses, stop_summaries = get_new_statuses_and_stop_summaries(
                             self.hosts, self.owner,
@@ -742,7 +740,7 @@ class BaseSummaryTimeoutUpdater(object):
             return True
         if self._should_force_update:
             self._should_force_update = False
-        
+
         # Sanitise hosts.
         for host in self.stop_summaries.keys():
             if host not in self.hosts:
@@ -750,7 +748,7 @@ class BaseSummaryTimeoutUpdater(object):
         for (host, suite) in list(self.prev_suites):
             if host not in self.hosts:
                 self.prev_suites.remove((host, suite))
-                
+
         # Get new information.
         statuses, stop_summaries = get_new_statuses_and_stop_summaries(
                        self.hosts, self.owner,
@@ -763,7 +761,7 @@ class BaseSummaryTimeoutUpdater(object):
         self.prev_suites = prev_suites
         self.statuses = statuses
         self.stop_summaries = stop_summaries
-        
+
         self.last_update_time = time.time()
         if self.statuses:
             self._last_running_time = None
@@ -781,7 +779,7 @@ class BaseSummaryTimeoutUpdater(object):
 class SummaryAppUpdater(BaseSummaryUpdater):
 
     """Update the summary app."""
-    
+
     def __init__(self, hosts, suite_treemodel, owner=None,
                  poll_interval=None):
         self.suite_treemodel = suite_treemodel

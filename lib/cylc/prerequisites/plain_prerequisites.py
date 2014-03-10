@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -29,9 +29,10 @@ class plain_prerequisites(object):
 
     def __init__( self, owner_id, ict=None ):
         self.labels = {}   # labels[ message ] = label
-        self.messages = {}   # messages[ label ] = message 
+        self.messages = {}   # messages[ label ] = message
         self.satisfied = {}    # satisfied[ label ] = True/False
         self.satisfied_by = {}   # self.satisfied_by[ label ] = task_id
+        self.target_tags = []   # list of target cycle times (tags)
         self.auto_label = 0
         self.owner_id = owner_id
         self.ict = ict
@@ -42,9 +43,9 @@ class plain_prerequisites(object):
             task = re.search( r'(.*).(.*) ', message)
             if task.group:
                 try:
-                    if (int(task.group().split(".")[1]) < int(self.ict) and 
+                    if (int(task.group().split(".")[1]) < int(self.ict) and
                         int(task.group().split(".")[1]) != 1):
-                        return 
+                        return
                 except IndexError:
                     pass
         if label:
@@ -65,6 +66,9 @@ class plain_prerequisites(object):
         self.labels[ message ] = label
         self.satisfied[label] = False
         self.satisfied_by[label] = None
+        m = re.match( self.__class__.TAG_RE, message )
+        if m:
+            self.target_tags.append( m.groups()[0] )
 
     def remove( self, message ):
         lbl = self.labels[message]
@@ -72,10 +76,13 @@ class plain_prerequisites(object):
         del self.messages[lbl]
         del self.satisfied[lbl]
         del self.satisfied_by[lbl]
+        m = re.match( self.__class__.TAG_RE, message )
+        if m and m.groups()[0] in self.target_tags:
+            self.target_tags.remove( m.groups()[0] )
 
     def all_satisfied( self ):
-        return not ( False in self.satisfied.values() ) 
-            
+        return not ( False in self.satisfied.values() )
+
     def satisfy_me( self, outputs ):
         # Can any completed outputs satisfy any of my prerequisites?
         for label, message in self.messages.items():
@@ -108,10 +115,5 @@ class plain_prerequisites(object):
     def get_target_tags( self ):
         """Return a list of cycle times target by each prerequisite,
         including each component of conditionals."""
-        tags = []
-        for label, msg in self.messages.items():
-            m = re.match( self.__class__.TAG_RE, msg )
-            if m:
-                tags.append( m.groups()[0] )
-        return tags 
+        return self.target_tags
 

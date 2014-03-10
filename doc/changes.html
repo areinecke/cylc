@@ -16,6 +16,17 @@
 <h3 style="margin:10px">versions</h3>
 <ul>
 		<li><a href="#">TOP</a></li>
+		<li><a href="#5.4.11">5.4.11</a></li>
+		<li><a href="#5.4.10">5.4.10</a></li>
+		<li><a href="#5.4.9">5.4.9</a></li>
+		<li><a href="#5.4.8">5.4.8</a></li>
+		<li><a href="#5.4.7">5.4.7</a></li>
+		<li><a href="#5.4.6">5.4.6</a></li>
+		<li><a href="#5.4.5">5.4.5</a></li>
+		<li><a href="#5.4.4">5.4.4</a></li>
+		<li><a href="#5.4.3">5.4.3</a></li>
+		<li><a href="#5.4.2">5.4.2</a></li>
+		<li><a href="#5.4.1">5.4.1</a></li>
 		<li><a href="#5.4.0">5.4.0</a></li>
 		<li><a href="#5.3.0">5.3.0</a></li>
 		<li><a href="#5.2.0">5.2.0</a></li>
@@ -29,9 +40,281 @@
 </ul>
 </div>
 
-<p>This pages mainly lists major enhancements and bug fixes. Selected minor
-bug fixes and changes may also be listed - for all changes see the
-cylc git repository change log.</p>
+<p>Some minor enhancements and bug fixes may be omitted from this page.
+For the definitive record see the cylc git repository change log.</p>
+
+<a name="5.4.11"/>
+		<h2>5.4.11</h2>
+
+		<ul>
+				<li>Fixed a recent bug (affecting 5.4.8 - 5.4.10) that prevents
+				successful <code>cylc restart SUITE</code> after using
+						<code>cylc reload SUITE</code>.</li>
+
+				<li>Fixed a Python traceback caused by attempting to
+				transpose an empty gcylc dot view prior to starting a
+				suite.</li>
+
+				<li>Minor simulation mode changes:</li>
+				<ul>
+						<li>simulation mode now runs on the real time clock</li>
+						<li>made the suite summary reflect task state changes to
+						'running' even if nothing else is happening at the time.</li>
+				</ul>
+		</ul>
+
+<a name="5.4.10"/>
+		<h2>5.4.10</h2>
+
+		<ul>
+
+		<li>Allow multiple event handlers per event hook.</li>
+
+		<li>Fixed a task polling bug affecting 5.4.8 - 5.4.9: poll results
+		for a hard killed task were logged correctly but did not
+		automatically set the task proxy to the 'failed' state.</li>
+
+		<li>Fixed a <code>cylc submit</code> bug affecting 5.4.5 - 5.4.9: 
+		If used <em>with the suite running at the same time</em> (not
+		recommended) the submit command would wipe out the port number in
+		the <code>cylc-suite-env</code> file, resulting in tasks losing
+		contact with their suite daemon.
+		</li>
+
+		<li>Better handling of OSError on job submission commands.</li>
+
+		<li>gcylc - correct log file sorting above 10 retries.</li>
+
+		</ul>
+
+<a name="5.4.9"/>
+		<h2>5.4.9</h2>
+
+		<ul>
+				<li>Fixed a bug affecting <b>5.4.5</b> through <b>5.4.8</b>: use
+				of <code>cylc submit</code> would cause task messaging failures if
+				the suite involved was running at the time.</li>
+		</ul>
+
+<a name="5.4.8"/>
+		<h2>5.4.8</h2>
+
+		<ul>
+				<li>Support job vacation in loadleveler (tasks killed by SIGUSR1 and 
+				then restarted later)</li>
+				<li>Reimplemented the <code>sequential</code> special task type
+				using automatically-generated inter-cycle triggers rather than
+				delayed spawning - they now behave "sequentially" under
+				all circumstances.</li>
+				<li>Delete the port file if suite start-up aborts early on</li>
+				<li>A new command, "cylc check-versions SUITE" checks that
+				the version of cylc invoked on each of SUITE's task hosts is the
+				same as *this* version, or else reports the remote versions.</li>
+				<li>Added task and family titles and descriptions to task
+				mouse-hover popups in the GUI.</li>
+				<li>Abort immediately if the suite database fails</li>
+				<li>Dropped redundant pre-action state dumps</li>
+				<li>Allow overlapping inheritance in a broadcast command</li>
+				<li>Fixed a bug that could (rarely) cause a wrong poll result on
+				running tasks at restart.</li>
+				<li>Restored support for user-defined job submission methods</li>
+				<li>Stopped ignoring stop cycle in tasks inserted via the GUI </li>
+				<li>Discard, rather than hold, inserted tasks that have passed
+				their private stop cycle (if they have one)</li>
+				<li>Ignore poll results if tasks have moved on since the
+				poll was initiated.</li>
+				<li>Better detect if a task host is the suite host</li>
+				<li>Fixed a bug that could cause proliferation of GUI error dialogs</li>
+				<li>Fix validation of hyphenated family-triggers where the
+				pre-hyphen part of the name matches another name.</li>
+				<li>Allow auto suite-polling tasks to explicitly unset inherited
+				command scripting. </li>
+		</ul>
+
+
+<a name="5.4.7"/>
+		<h2>5.4.7</h2>
+
+		<ul>
+				<li>Fixed a bug introduced in 5.4.5 that prevents releasing a
+				held suite with asynchronous (non-cycling) tasks that have not
+				run yet (e.g. with use of <code>cylc run --hold</code>)</li>
+
+				<li>Task messaging does not bother retrying if the corresponding
+				task proxy has been removed from the suite.</li>
+
+				<li>Suicide triggering is now logged like other triggering
+				events.</li>
+
+				<li>A warning is logged if an active task suicides.</li>
+
+				<li>Fixed an error in the suicide trigger tutorial suite.</li>
+
+				<li>Pre-initial-cycle triggers are now ignored for
+				message-output triggers.</li>
+		</ul>
+	
+
+<a name="5.4.6"/>
+		<h2>5.4.6</h2>
+
+		<ul>
+				<li>Improved suite state-dumping with atomic updates - avoids
+				state file corruption even in the event of a power failure.</li>
+
+				<li>Run <code>background</code> and <code>at</code> jobs in 
+				their own process groups so that task job kill can get even
+				their sub-processes.</li>
+
+				<li>Dependency graphs: fixed an abort caused by use of
+				unnecessary brackets around pre-initial-cycle triggers.</li>
+
+				<li>Catch <code>inherit = None</code> in the runtime inheritance
+				hierarchy (this is illegal without one or more secondary
+				parents).</li>
+
+				<li>Handle unknown task states in the GUI (provides backward
+				compatibity for pre-5.4.5 suite daemons).</li>
+		</ul>
+	
+<a name="5.4.5"/>
+		<h2>5.4.5</h2>
+
+		<ul>
+				<li>Simplified polling for tasks submitted to <em>loadleveler</em>,
+				<em>pbs</em>, <em>sge</em>, <em>background</em>, or <em>at</em>: </li>
+				<ul>
+						<li> <em>submitted</em> - job in the queueing system, but has no
+						task status file. </li>
+						<li> <em>submission failed</em> - job not in the queueing system, and has no
+						task status file. </li>
+						<li> <em>running</em> - job in the queueing system, and has a 
+						task status file. </li>
+						<li> <em>succeeded</em> or <em>failed</em> - job not in the queueing system but has a 
+						task status file. </li>
+				</ul>
+				
+				<p/>
+				Additionally, an old task status file, if present, will be deleted at submission time.
+
+				<li>More cylc daemon performance enhancements for large suites.</li>
+
+				<li>The <code>cylc cat-log</code> command can now print remote task logs.</li>
+
+				<li>Changed the <em>submitting</em> task state name to
+				<em>ready</em> - meaning the task is ready to run and has been
+				passed to the job submission thread in the cylc daemon.</li>
+
+				<li>New User Guide sections under <em>Suite Design Principles:</em></li>
+				<ul>
+						<li> <em>Factor Out Common Configuration</em></li>
+						<li> <em>Use the Graph for Scheduling</em></li>
+						<li> <em>Use Suite Visualization</em> </li>
+				</ul>
+
+				<li>New User Guide section - <em>Style Guide</em> </li>
+
+				<li>Added a command wrapper script, and documentation, to
+				facilate use of multiple versions of cylc at once - so you can
+				run new suites at new versions of cylc without having to upgrade
+				existing long-running suites.</li>
+
+				<li>Handle a known problem with the ext4 filesystem that could wipe
+				out cylc state dump files in the event of a power failure. </li>
+
+				<li>Graceful shutdown on loading a corrupted restart state dump file.</li>
+
+				<li>Use the normal suite run directory for tasks executed by the 
+				<code>cylc submit</code> command </li>
+
+
+				<li>Moved some common log messages to debug level.</li>
+
+		</ul>
+	
+<a name="5.4.4"/>
+		<h2>5.4.4</h2>
+
+		<ul>
+				<li>New <code>[runtime][NAME][environment filter]</code> allows
+				inherited variables to be explicitly included or excluded from
+				task environments.</li>
+
+				<li><code>cylc stop</code> command help improved.</li>
+
+				<li>Shut down cleanly if access to the suite run directory is
+				lost.</li>
+
+				<li>Fixed graphing of suite start up when several subsequent
+				cycles depend on an initial asynchronous task.</li>
+		</ul>
+	
+<a name="5.4.3"/>
+		<h2>5.4.3</h2>
+
+		<ul>
+				<li>The <code>cylc get-config</code> and <code>cylc
+						get-global-config</code> commands now print blank values 
+				instead of the Pythonic <code>None</code> for unset items. This
+				means newly generated user config files are usable immediately
+				without modification.</li>
+
+				<li>Sensible suite-dependent defaults are now computed for the 
+				<code>[visualization]</code> initial and final cycle times:
+				from the suite's initial cycle time out to its default runahead
+				limit</li>
+
+				<li>For inlined editing of suites with include-files, the 
+				file inclusion markers are now comments so that the suite
+				definition can still be used (validated etc.) during the 
+				edit session.</li>
+
+				<li>Fixed a recent bug that breaks polling of tasks with  
+				an explicit 'owner' configured (as opposed to defaulting 
+				to the suite owner's username, or using <code>.ssh/config</code>
+				to translate usernames for remote tasks). This bug would 
+				break suite restart if any such tasks were present in the
+				submitted or running states.</li>
+		</ul>
+
+	
+<a name="5.4.2"/>
+		<h2>5.4.2</h2>
+
+		<ul>
+				<li>Fixes a bug that could cause an error in gcylc if it tried
+				to interrogate a very large suite before it had finished
+				initializing.</li>
+
+				<li>Allow the suite name delimiter '.' (dot) character in 
+				the names of the new automatic suite-polling tasks.</li>
+
+				<li>Fixed a recently introduced bug that caused the <code>cylc
+						db refresh</code> command to crash if a suite's name had
+						been changed.</li>
+
+				<li>Fixed gcylc graph view right-click family Group/Ungroup 
+				behaviour.</li>
+
+				<li>Documented automatic suite-polling tasks (triggering off 
+				tasks in other suites) in the user guide.</li>
+
+				<li>Updated suite definition syntax documentation in the 
+				user guide.</li>
+
+				<li>Further expansion of the automated test battery.</li>
+
+		</ul>
+	
+
+<a name="5.4.1"/>
+		<h2>5.4.1</h2>
+
+			<ul>
+				<li>Fixes a bug introduced just before the 5.4.0 release: cylc 
+				would abort if a task in a suite with no final cycle time hit 
+				the runahead limit.
+		   </ul>	
 
 <a name="5.4.0"/>
 		<h2>5.4.0</h2>

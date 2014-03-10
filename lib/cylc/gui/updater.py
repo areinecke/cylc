@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -118,7 +118,9 @@ class Updater(threading.Thread):
         self.god = None
         self.mode = "waiting..."
         self.dt = "waiting..."
+        self.dt_date = None
         self.status = None
+        self.connected = False
         self._no_update_event = threading.Event()
         self.poll_schd = PollSchd()
         self._flag_new_update()
@@ -160,6 +162,7 @@ class Updater(threading.Thread):
             self.err_log_lines = []
             self.err_log_size = 0
             self.status = "connected"
+            self.connected = True
             self.poll_schd.stop()
             self._flag_new_update()
             return True
@@ -169,6 +172,7 @@ class Updater(threading.Thread):
         self.state_summary = {}
         self.fam_state_summary = {}
         self.status = "stopped"
+        self.connected = False
         self._flag_new_update()
         self.poll_schd.start()
         self.info_bar.set_state( [] )
@@ -187,7 +191,7 @@ class Updater(threading.Thread):
 
     def update(self):
         #print "Attempting Update"
-        
+
         if self.god is None:
             gobject.idle_add( self.connection_lost )
             return False
@@ -209,7 +213,7 @@ class Updater(threading.Thread):
             self.err_log_lines += new_err_content.splitlines()
             self.err_log_lines = self.err_log_lines[-self._err_num_log_lines:]
             self.err_log_size = new_err_size
-        
+
         update_summaries = False
         try:
             summary_update_time = self.god.get_summary_update_time()
@@ -222,7 +226,7 @@ class Updater(threading.Thread):
             # TODO: post-backwards compatibility concerns, remove this handling.
             # Force an update for daemons using the old API.
             update_summaries = True
-        except Pyro.errors.ProtocolError:
+        except (Pyro.errors.ProtocolError, Pyro.errors.NamingError):
             gobject.idle_add( self.connection_lost )
             return False
 
@@ -230,7 +234,7 @@ class Updater(threading.Thread):
             try:
                 [glbl, states, fam_states] = self.god.get_state_summary()
                 self.task_list = self.god.get_task_name_list()
-            except Pyro.errors.ProtocolError:
+            except (Pyro.errors.ProtocolError, Pyro.errors.NamingError):
                 gobject.idle_add( self.connection_lost )
                 return False
 
@@ -259,6 +263,7 @@ class Updater(threading.Thread):
 
             dt = glbl[ 'last_updated' ]
             self.dt = strftime( dt, " %Y/%m/%d %H:%M:%S" )
+            self.dt_date = dt
 
             self.global_summary = glbl
             self.state_summary = states

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
-#C: 
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
+#C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
 #C: the Free Software Foundation, either version 3 of the License, or
@@ -16,13 +16,14 @@
 #C: You should have received a copy of the GNU General Public License
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-""" 
+"""
 Documentation
 """
 
 import os, sys
 from optparse import OptionParser
 from cylc.task_message import message
+import cylc.flags
 
 usage = """cylc [task] failed [OPTIONS] [REASON]
 
@@ -32,7 +33,7 @@ running tasks to communicate progress to their parent suite.
 The failed command reports failure of task execution (and releases the
 task lock to the lockserver if necessary). It is automatically called in
 case of an error trapped by the task job script, but it can also be
-called explicitly for self-detected failures if necessary. 
+called explicitly for self-detected failures if necessary.
 
 Suite and task identity are determined from the task execution
 environment supplied by the suite (or by the single task 'submit'
@@ -53,6 +54,7 @@ parser.add_option( "-v", "--verbose",
         action="store_true", default=False, dest="verbose" )
 
 ( options, args ) = parser.parse_args()
+cylc.flags.verbose = options.verbose
 
 if len( args ) == 0:
     reason = None
@@ -68,7 +70,7 @@ except KeyError:
     pass
 
 try:
-    message( msg=reason, verbose=options.verbose ).send_failed()
+    message( msg=reason ).send_failed()
 except Exception, x:
     print >> sys.stderr, 'ERROR: task messaging failure.'
     if debug:

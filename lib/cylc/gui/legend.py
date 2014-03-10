@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -40,7 +40,7 @@ class ThemeLegendWindow(gtk.Window):
         self.set_type_hint( gtk.gdk.WINDOW_TYPE_HINT_DIALOG )
 
         vbox = gtk.VBox()
- 
+
         self._theme = theme_map
         self._key_liststore = gtk.ListStore( str, gtk.gdk.Pixbuf )
         treeview = gtk.TreeView( self._key_liststore )

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ from task import task
 from cylc.cycle_time import ct
 from copy import deepcopy
 
-# Cycling tasks: cycle time also required for a cold start. Init with: 
+# Cycling tasks: cycle time also required for a cold start. Init with:
 #  (1) cycle time
 #  (2) state ('waiting', 'submitted', 'running', and 'succeeded' or 'failed')
 
@@ -45,14 +45,15 @@ from copy import deepcopy
 # state values found in the state dump file.
 
 class cycling( task ):
-    
+
     intercycle = False
     # This is a statement that the task has only cotemporal dependants
     # and as such can be deleted as soon as there are no unsucceeded
     # tasks with cycle times equal to or older than its own cycle time
-    # (prior to that we can't be sure that an older unsucceeded 
+    # (prior to that we can't be sure that an older unsucceeded
     # task won't give rise to a new task that does depend on the task
-    # we're interested in). 
+    # we're interested in).
+    is_cycling = True
 
     # DERIVED CLASSES MUST OVERRIDE ready_to_spawn()
 
@@ -62,7 +63,7 @@ class cycling( task ):
         # Derived class init MUST define:
         #  * self.id after calling self.nearest_c_time()
         #  * prerequisites and outputs
-        #  * self.env_vars 
+        #  * self.env_vars
 
         # Top level derived classes must define:
         #   <class>.instance_count = 0
@@ -71,11 +72,6 @@ class cycling( task ):
         self.stop_c_time = stop_c_time
         task.__init__( self, state, validate )
 
-    def ready_to_spawn( self ):
-        # return True or False
-        self.log( 'CRITICAL', 'ready_to_spawn(): OVERRIDE ME')
-        sys.exit(1)
-
     def next_tag( self, ctime=None ):
         if not ctime:
             ctime = self.tag
@@ -83,10 +79,8 @@ class cycling( task ):
 
     def get_state_summary( self ):
         summary = task.get_state_summary( self )
-        # derived classes can call this method and then 
+        # derived classes can call this method and then
         # add more information to the summary if necessary.
         summary[ 'cycle_time' ] = self.c_time   # (equiv to self.tag)
         return summary
 
-    def is_cycling( self ):
-        return True

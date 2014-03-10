@@ -1,6 +1,6 @@
 #!/bin/bash
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C: 
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 #C: Test runahead limit is being enforced
 . $(dirname $0)/test_header
 #-------------------------------------------------------------------------------
-set_test_number 3
+set_test_number 4
 #-------------------------------------------------------------------------------
 install_suite $TEST_NAME_BASE runahead
 #-------------------------------------------------------------------------------
@@ -37,5 +37,9 @@ if (($TASKS==3)); then
 else 
     fail $TEST_NAME
 fi 
+#-------------------------------------------------------------------------------
+TEST_NAME=$TEST_NAME_BASE-check-timeout
+LOG=$(cylc get-global-config --print-run-dir)/$SUITE_NAME/log/suite/log
+run_ok $TEST_NAME grep 'Abort on suite timeout is set' $LOG
 #-------------------------------------------------------------------------------
 purge_suite $SUITE_NAME

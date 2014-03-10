@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -17,7 +17,6 @@
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import re, sys, socket
-from global_config import get_global_cfg
 
 hostname = None
 suite_host = None
@@ -76,21 +75,21 @@ def get_hostname():
         hostname = socket.getfqdn()
     return hostname
 
-def get_host_ip_address( verbose=False ):
+def get_host_ip_address():
+    from cfgspec.site import sitecfg
     global host_ip_address
     if host_ip_address is None:
-        gcfg = get_global_cfg( verbose=verbose )
-        target = gcfg.cfg['suite host self-identification']['target']
+        target = sitecfg.get( ['suite host self-identification','target'] )
         # external IP address of the suite host:
         host_ip_address = get_local_ip_address( target )
     return host_ip_address
 
-def get_suite_host( verbose=False ):
+def get_suite_host():
+    from cfgspec.site import sitecfg
     global suite_host
     if suite_host is None:
-        gcfg = get_global_cfg( verbose=verbose )
-        hardwired = gcfg.cfg['suite host self-identification']['host']
-        method = gcfg.cfg['suite host self-identification']['method']
+        hardwired = sitecfg.get( ['suite host self-identification','host'] )
+        method = sitecfg.get( ['suite host self-identification','method'] )
         # the following is for suite host self-identfication in task job scripts:
         if method == 'name':
             suite_host = hostname
@@ -111,13 +110,13 @@ def is_remote_host(name):
     if not name or name == "localhost":
         return False
     try:
-        ipa = socket.gethostbyname(name) 
+        ipa = socket.gethostbyname(name)
     except Exception, e:
         print >> sys.stderr, str(e)
         raise Exception( 'ERROR, host not found: ' + name )
     host_ip_address = get_host_ip_address()
     # local IP address of the suite host (may be 127.0.0.1, for e.g.)
-    local_ip_address = socket.gethostbyname(get_hostname()) 
+    local_ip_address = socket.gethostbyname(get_hostname())
     return name and ipa != host_ip_address and ipa != local_ip_address
 
 if __name__ == "__main__":

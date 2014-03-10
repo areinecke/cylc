@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -62,9 +62,9 @@ class DotMaker(object):
                 "**......**",
                 "**********",
                 "**********" ]
-            
 
-        if not state:
+
+        if not state or state not in self.theme:
             # empty icon (assuming a white page background)
             cols = ['white', 'white' ]
         else:
@@ -78,7 +78,7 @@ class DotMaker(object):
 
         xpm[1] = xpm[1].replace( '<FILL>', cols[0] )
         xpm[2] = xpm[2].replace( '<BRDR>', cols[1] )
-        
+
         # NOTE: to get a pixbuf from an xpm file, use:
         #    gtk.gdk.pixbuf_new_from_file('/path/to/file.xpm')
         return gtk.gdk.pixbuf_new_from_xpm_data( data=xpm )

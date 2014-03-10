@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Implements a simple rolling archive based on a given base filename.
-# Used for cylc state dump files. 
+# Used for cylc state dump files.
 
 import os
 
@@ -39,11 +39,14 @@ class rolling_archive(object):
 
         for i in reversed( range( 1, self.archive_length )):
             if os.path.exists( self.__filename( i )):
-                os.rename( self.__filename(i), self.__filename(i+1) )
+                try:
+                    os.rename( self.__filename(i), self.__filename(i+1) )
+                except OSError:
+                    raise
 
         if os.path.exists( self.base_filename):
             os.rename( self.base_filename, self.__filename(1) )
-        
+
         self.file_handle = open( self.base_filename, 'w' )
         return self.file_handle
 

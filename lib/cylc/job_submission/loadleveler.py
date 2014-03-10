@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 import re
 from job_submit import job_submit
 from cylc.TaskID import TaskID
+from subprocess import check_call, Popen, PIPE
 
 class loadleveler( job_submit ):
 
@@ -26,6 +27,8 @@ class loadleveler( job_submit ):
 
     COMMAND_TEMPLATE = "llsubmit %s"
     REC_ID = re.compile(r"""\Allsubmit:\sThe\sjob\s"(?P<id>[^"]+)"\s""")
+    REC_PROCESSED_FILTER = re.compile(
+        r"^llsubmit: Processed command file through Submit Filter:")
 
     def set_directives( self ):
         self.jobconfig['directive prefix'] = "# @"
@@ -34,7 +37,7 @@ class loadleveler( job_submit ):
 
         defaults = {}
         defaults[ 'job_name' ] = self.suite + TaskID.DELIM + self.task_id
-        # Replace literal '$HOME' in stdout and stderr file paths with '' 
+        # Replace literal '$HOME' in stdout and stderr file paths with ''
         # because environment variables are not interpreted in directives.
         # (For remote tasks the local home directory path is replaced
         # with '$HOME' in config.py).
@@ -59,6 +62,15 @@ class loadleveler( job_submit ):
             defaults[ d ] = val
         self.jobconfig['directives'] = defaults
 
+    def set_job_vacation_signal( self ):
+        """Set self.jobconfig['job vacation signal'] = 'USR1'
+
+        (If restart=yes is defined in self.jobconfig['directives'])
+
+        """
+        if self.jobconfig['directives'].get('restart') == 'yes':
+            self.jobconfig['job vacation signal'] = 'USR1'
+
     def construct_jobfile_submission_command( self ):
         """
         Construct a command to submit this job to run.
@@ -67,6 +79,15 @@ class loadleveler( job_submit ):
         if not command_template:
             command_template = self.__class__.COMMAND_TEMPLATE
         self.command = command_template % ( self.jobfile_path )
+
+    def filter_output( self, out, err):
+        """Filter the stdout/stderr output - suppress process message."""
+        new_err = ""
+        if err:
+            for line in err.splitlines():
+                if not self.REC_PROCESSED_FILTER.match(line):
+                    new_err += line + "\n"
+        return out, new_err
 
     def get_id( self, out, err ):
         """
@@ -79,41 +100,27 @@ class loadleveler( job_submit ):
             if match:
                 return match.group("id")
 
-    def get_job_poll_command( self, jid ):
-        """
-        Given the job submit ID, return a command string that uses
-        'cylc get-task-status' to determine current job status:
-           cylc get-job-status <QUEUED> <RUNNING>
-        where:
-            QUEUED  = true if job is waiting or running, else false
-            RUNNING = true if job is running, else false
+    def kill( self, jid, st_file=None ):
+        """Kill the job."""
+        check_call(["llcancel", jid])
 
-        WARNING: 'cylc get-task-status' prints a task status message -
-        the final result - to stdout, so any stdout from scripting prior
-        to the call must be dumped to /dev/null.
-
-        Loadleveler has MANY possible job states; I think we only need:
-          * 'I' (idle?) = waiting in the loadleveler queue
-          * 'R' (running) or 'ST' (starting) = running
-        """
-        cmd = ( "RUNNING=false; QUEUED=false; "
-                + "llq -f %id %st " + jid + " | grep " + jid
-                + " | awk \"{ print \$2 }\" | egrep \"^(R|ST)$\" > /dev/null; "
-                + "[[ $? == 0 ]] && RUNNING=true && QUEUED=true; "
-                + "if ! $QUEUED; then "
-                + "  llq -f %id %st " + jid
-                + "   | awk \"{ print \$2 }\" | egrep \"^I$\" > /dev/null; "
-                + "  [[ $? == 0 ]] && QUEUED=true; "
-                + "fi; "
-            + " cylc get-task-status " + self.jobfile_path + ".status $QUEUED $RUNNING" )
-        return cmd
-
-    def get_job_kill_command( self, jid ):
-        """
-        Given the job submit ID, return a command to kill the job.
-        Note that llcancel does not report successful job kill, just:
-        "Cancel command has been sent to the central manager"
-        """
-        cmd = "llcancel " + jid
-        return cmd
-
+    def poll( self, jid ):
+        """Return 0 if jid is in the queueing system, 1 otherwise."""
+        proc = Popen(["llq", "-f%id", jid], stdout=PIPE)
+        if proc.wait():
+            return 1
+        out, err = proc.communicate()
+        # "llq -f%id ID" returns EITHER something like:
+        #     Step Id
+        #     ------------------------
+        #     a001.3274552.0
+        #
+        #     1 job step(s) in query, ...
+        # OR:
+        #     llq: There is currently no job status to report.
+        # "jid" is in queue if it matches a stripped row.
+        for line in out.splitlines():
+            items = line.strip().split(None, 1)
+            if items and (items[0] == jid or items[0].startswith(jid + ".")):
+                return 0
+        return 1

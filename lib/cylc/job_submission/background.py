@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -18,6 +18,9 @@
 
 from job_submit import job_submit
 from cylc.command_env import pr_scripting_sl
+import os
+from signal import SIGKILL
+from subprocess import Popen, PIPE
 
 class background( job_submit ):
     """
@@ -29,17 +32,21 @@ class background( job_submit ):
       % ssh user@host 'job-script & echo $!; wait'
     (We have to override the general command templates to achieve this)."""
 
-    LOCAL_COMMAND_TEMPLATE = ( "(%(command)s & echo $!; wait )" )
+    LOCAL_COMMAND_TEMPLATE = ( "( %(command)s & echo $!; wait )" )
 
     REMOTE_COMMAND_TEMPLATE = ( " '"
             + pr_scripting_sl + "; "
             + " mkdir -p $(dirname %(jobfile_path)s)"
             + " && cat >%(jobfile_path)s"
-            + " && chmod +x %(jobfile_path)s" 
-            + " && ( (%(command)s) & echo $!; wait )"
+            + " && chmod +x %(jobfile_path)s"
+            + " && ( %(command)s & echo $!; wait )"
             + "'" )
- 
-    COMMAND_TEMPLATE = "%s </dev/null 1>%s 2>%s"
+
+    # N.B. The perl command ensures that the job script is executed in its own
+    # process group, which allows the job script and its child processes to be
+    # killed correctly.
+    COMMAND_TEMPLATE = ("perl -e \"setpgrp(0,0);exec(@ARGV)\" %s " +
+                        "</dev/null 1>%s 2>%s")
 
     def construct_jobfile_submission_command( self ):
         """
@@ -60,31 +67,10 @@ class background( job_submit ):
         """
         return out.strip()
 
-    def get_job_poll_command( self, pid ):
-        """
-        Given the job process ID, return a command string that uses
-        'cylc get-task-status' (on the task host) to determine current
-        job status:
-           cylc get-job-status <QUEUED> <RUNNING>
-        where:
-            QUEUED  = true if job is waiting or running, else false
-            RUNNING = true if job is running, else false
+    def kill( self, jid, st_file=None ):
+        """Kill the job."""
+        os.killpg(int(jid), SIGKILL)
 
-        WARNING: 'cylc get-task-status' prints a task status message -
-        the final result - to stdout, so any stdout from scripting prior
-        to the call must be dumped to /dev/null.
-        """
-        status_file = self.jobfile_path + ".status"
-        cmd = ( "RUNNING=false; "
-                + "ps " + pid + " >/dev/null; "
-                + "[[ $? == 0 ]] && RUNNING=true; "
-                + "cylc get-task-status " + status_file + " $RUNNING $RUNNING"  )
-        return cmd
-
-    def get_job_kill_command( self, pid ):
-        """
-        Given the job process ID, return a command to kill the job.
-        """
-        cmd = "kill -9 " + pid
-        return cmd
-
+    def poll( self, jid ):
+        """Return 0 if jid is in the queueing system, 1 otherwise."""
+        return Popen(["ps", jid], stdout=PIPE).wait()

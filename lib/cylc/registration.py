@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 
 import os, sys, re
 from regpath import RegPath
+import flags
 
 """Simple suite name registration database."""
 
@@ -30,11 +31,10 @@ class RegistrationError( Exception ):
         return repr(self.msg)
 
 class localdb(object):
-    def __init__( self, file=None, verbose=False):
+    def __init__( self, file=None ):
         dbpath = file # (back compat)
         global regdb_path
         self.dbpath = dbpath or regdb_path
-        self.verbose = verbose
         # create initial database directory if necessary
         if not os.path.exists( self.dbpath ):
             try:
@@ -73,14 +73,14 @@ class localdb(object):
             print >> sys.stderr, "Registering the suite with temporary title 'SUITE PARSE ERROR'."
             print >> sys.stderr, "You can update the title later with 'cylc db refresh'.\n"
             title = "SUITE PARSE ERROR"
-        
+
         title = title.split('\n')[0] # use the first of multiple lines
         print 'REGISTER', name + ':', dir
         with open( os.path.join( self.dbpath, name ), 'w' ) as file:
             file.write( 'path=' + dir + '\n' )
             file.write( 'title=' + title + '\n' )
 
-    def get_suite_data( self, suite ): 
+    def get_suite_data( self, suite ):
         suite = RegPath(suite).get()
         fpath = os.path.join( self.dbpath, suite )
         if not os.path.isfile( fpath ):
@@ -131,9 +131,14 @@ class localdb(object):
         for key in self.list_all_suites():
             if re.search( exp + '$', key ):
                 data = self.get_suite_data(key)
-                dir = data['path'] 
+                dir = data['path']
                 print 'UNREGISTER', key + ':', dir
                 os.unlink( os.path.join( self.dbpath, key ) )
+                for f in ['passphrase', 'suite.rc.processed']:
+                    try:
+                        os.unlink( os.path.join( dir, f ) )
+                    except OSError:
+                        pass
                 if dir not in suitedirs:
                     # (could be multiple registrations of the same suite).
                     suitedirs.append(dir)
@@ -168,45 +173,29 @@ class localdb(object):
             data = self.get_suite_data(reg)
             dir = data['path']
             rcfile = os.path.join( dir, 'suite.rc' )
-            if not os.path.isfile( rcfile ): 
+            if not os.path.isfile( rcfile ):
                 invalid.append( reg )
         return invalid
 
     def get_suite_title( self, suite, path=None ):
-        "Determine the suite title without a full file parse"
+        """Determine the (first line of) the suite title without a full
+        file parse. Assumes the title is not in an include-file."""
+
         if not path:
             data = self.get_suite_data( suite )
             path = data['path']
         suiterc = os.path.join( path, 'suite.rc' )
 
-        title = ""
-        found_start = False
-        done = False
-        for xline in open( suiterc, 'rb' ):
-            if re.search( '^ *\[', xline ):
-                # abort the search: title comes before first [section]
+        title = "No title provided"
+        for line in open( suiterc, 'rb' ):
+            if re.search( '^\s*\[', line ):
+                # abort: title comes before first [section]
                 break
-            line = xline.strip()
-            if not found_start:
-                m = re.match( '^title\s*=\s*([\'\"]+)(.*)', line )
-                if m:
-                    found_start = True
-                    # strip quotes
-                    start_quotes, line = m.groups()
-            if found_start:
-                if line.endswith( start_quotes ):
-                    # strip quotes
-                    line = re.sub( start_quotes, '', line )
-                    done = True
-                if title:
-                    # adding on a second line on
-                    title += " "
-                title += line
-                if done:
-                    break
+            m = re.match( '^\s*title\s*=\s*(.*)\s*$', line )
+            if m:
+                line = m.groups()[0]
+                title = line.strip('"\'')
 
-        if not title:
-            title = "No title provided"
         return title
 
     def refresh_suite_title( self, suite ):
@@ -214,13 +203,16 @@ class localdb(object):
         dir, title = data['path'], data['title']
         new_title = self.get_suite_title( suite )
         if title == new_title:
-            #if self.verbose:
-            print 'unchanged:', suite#, '->', title
+            if flags.verbose:
+                print 'unchanged:', suite
             changed = False
         else:
-            print 'RETITLED:', suite #, '->', new_title
+            print 'RETITLED:', suite
+            print '   old title:', title
+            print '   new title:', new_title
             changed = True
-            self.items[suite] = dir, new_title
+            self.unregister( suite )
+            self.register( suite, dir )
         return changed
 
     def get_rcfiles ( self, suite ):

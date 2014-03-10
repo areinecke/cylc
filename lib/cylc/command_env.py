@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ profile scripts. It is used at the top of task job scripts to give tasks
 access to cylc on task hosts; and as the first part of event handler and
 task poll and kill command strings, so that those commands also run
 under the selected cylc version (event handlers may call cylc commands).
-This allows users to run suites under multiple cylc versions at once, by 
+This allows users to run suites under multiple cylc versions at once, by
 setting their $PATH according to the cylc version number if necessary.
 """
 

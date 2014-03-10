@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
-#C: 
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
+#C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
 #C: the Free Software Foundation, either version 3 of the License, or
@@ -18,32 +18,21 @@
 
 import os, sys, re
 import logging, logging.handlers
-from global_config import get_global_cfg
+from cfgspec.site import sitecfg
 
 """Configure suite logging with the Python logging module, 'main'
 logger, in a sub-directory of the suite running directory."""
 
-class LogFilter(logging.Filter):
-    # Replace log timestamps with those of the supplied clock
-    # (which may be UTC or simulation time).
-    def __init__(self, clock, name = "" ):
-        logging.Filter.__init__( self, name )
-        self.clock = clock
-
-    def filter(self, record):
-        # replace log message time stamp with simulation time
-        record.created = self.clock.get_epoch()
-        return True
-
 class suite_log( object ):
     def __init__( self, suite ):
-        gcfg = get_global_cfg()
-        self.ldir = gcfg.get_derived_host_item( suite, 'suite log directory' )
+
+        self.ldir = sitecfg.get_derived_host_item( suite, 'suite log directory' )
         self.path = os.path.join( self.ldir, 'log' ) 
+
         self.err_path = os.path.join( self.ldir, 'err' )
-        self.roll_at_startup = gcfg.cfg['suite logging']['roll over at start-up']
-        self.n_keep = gcfg.cfg['suite logging']['rolling archive length']
-        self.max_bytes = gcfg.cfg['suite logging']['maximum size in bytes']
+        self.roll_at_startup = sitecfg.get( ['suite logging','roll over at start-up'] )
+        self.n_keep = sitecfg.get( ['suite logging','rolling archive length'] )
+        self.max_bytes = sitecfg.get( ['suite logging','maximum size in bytes'] )
 
     def get_err_path( self ):
         return self.err_path
@@ -57,8 +46,8 @@ class suite_log( object ):
     def get_log( self ):
         # not really necessary: just get the main logger
         return logging.getLogger( 'main' )
-   
-    def pimp( self, level=logging.INFO, clock=None ):
+
+    def pimp( self, level=logging.INFO ):
         log = logging.getLogger( 'main' )
         log.setLevel( level )
 
@@ -79,8 +68,4 @@ class suite_log( object ):
 
         h.setFormatter(f)
         log.addHandler(h)
-
-        # replace default time stamps
-        if clock:
-            log.addFilter( LogFilter( clock, "main" ))
 

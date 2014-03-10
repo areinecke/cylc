@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,8 +19,8 @@
 """
 Job submission base class.
 
-Writes a temporary "job file" that encapsulates the task runtime settings 
-(execution environment, command scripting, etc.) then submits it by the 
+Writes a temporary "job file" that encapsulates the task runtime settings
+(execution environment, command scripting, etc.) then submits it by the
 chosen method on the chosen host (using passwordless ssh if not local).
 
 Derived classes define the particular job submission method.
@@ -34,9 +34,10 @@ from subprocess import Popen, PIPE
 from cylc.owner import user, is_remote_user
 from cylc.suite_host import is_remote_host
 from cylc.TaskID import TaskID
-from cylc.global_config import get_global_cfg
+from cylc.cfgspec.site import sitecfg
 from cylc.envvar import expandvars
 from cylc.command_env import pr_scripting_sl
+import cylc.flags
 
 class job_submit(object):
 
@@ -47,6 +48,7 @@ class job_submit(object):
             + " mkdir -p $(dirname %(jobfile_path)s)"
             + " && cat >%(jobfile_path)s"
             + " && chmod +x %(jobfile_path)s"
+            + " && rm -f %(jobfile_path)s.status"
             + " && (%(command)s)"
             + "'" )
 
@@ -64,9 +66,8 @@ class job_submit(object):
         # (used by both local and remote tasks)
         tag = task_id + TaskID.DELIM + submit_num
 
-        gcfg = get_global_cfg()
         self.local_jobfile_path = os.path.join( \
-                gcfg.get_derived_host_item( self.suite, 'suite job log directory' ), tag )
+                sitecfg.get_derived_host_item( self.suite, 'suite job log directory' ), tag )
 
         # The directory is created in config.py
         self.logfiles.add_path( self.local_jobfile_path )
@@ -74,7 +75,7 @@ class job_submit(object):
         task_host = jobconfig.get('task host')
         task_owner  = jobconfig.get('task owner')
 
-        self.remote_shell_template = gcfg.get_host_item( 'remote shell template', task_host, task_owner )
+        self.remote_shell_template = sitecfg.get_host_item( 'remote shell template', task_host, task_owner )
 
         if is_remote_host(task_host) or is_remote_user(task_owner):
             # REMOTE TASK OR USER ACCOUNT SPECIFIED FOR TASK - submit using ssh
@@ -90,7 +91,7 @@ class job_submit(object):
                 self.task_host = socket.gethostname()
 
             self.remote_jobfile_path = os.path.join( \
-                    gcfg.get_derived_host_item( self.suite, 'suite job log directory', self.task_host, self.task_owner ), tag )
+                    sitecfg.get_derived_host_item( self.suite, 'suite job log directory', self.task_host, self.task_owner ), tag )
 
             # Remote log files
             self.stdout_file = self.remote_jobfile_path + ".out"
@@ -143,9 +144,11 @@ class job_submit(object):
         self.jobconfig[ 'directive prefix'    ] = None
         self.jobconfig[ 'directive final'     ] = "# FINAL DIRECTIVE"
         self.jobconfig[ 'directive connector' ] = " "
+        self.jobconfig[ 'job vacation signal' ] = None
 
         # overrideable methods
         self.set_directives()
+        self.set_job_vacation_signal()
         self.set_scripting()
         self.set_environment()
 
@@ -155,7 +158,7 @@ class job_submit(object):
         # (directives will be ignored if the prefix below is not overridden)
 
         # Defaults set in task.py:
-        # self.jobconfig = { 
+        # self.jobconfig = {
         #  PREFIX: e.g. '#QSUB' (qsub), or '# @' (loadleveler)
         #      'directive prefix' : None,
         #  FINAL directive, WITH PREFIX, e.g. '# @ queue' for loadleveler
@@ -172,20 +175,24 @@ class job_submit(object):
         # Derived classes can use this to modify task execution environment
         return
 
+    def set_job_vacation_signal( self ):
+        """Derived class can set self.jobconfig['job vacation signal']."""
+        return
+
     def construct_jobfile_submission_command( self ):
         # DERIVED CLASSES MUST OVERRIDE THIS METHOD to construct
         # self.command, the command to submit the job script to
         # run by the derived class job submission method.
         raise SystemExit( 'ERROR: no job submission command defined!' )
 
-    def submit( self, dry_run=False, debug=False ):
+    def submit( self, dry_run=False ):
         """ submit the task and return the process ID of the job
         submission sub-process, or None if a failure occurs."""
 
         try:
             os.chdir( pwd.getpwnam(user).pw_dir )
         except OSError, e:
-            if debug:
+            if cylc.flags.debug:
                 raise
             print >> sys.stderr, "ERROR:", e
             print >> sys.stderr, "ERROR: Failed to change to suite owner's home directory"
@@ -214,7 +221,7 @@ class job_submit(object):
         try:
             self.construct_jobfile_submission_command()
         except TypeError, x:
-            if debug:
+            if cylc.flags.debug:
                 raise
             print >> sys.stderr, "ERROR:", x
             print >> sys.stderr, "ERROR: Failed to construct job submission command"
@@ -241,6 +248,11 @@ class job_submit(object):
             print 'SUBMIT:', command
             return None
 
+        # Ensure old job's *.status files do not get left behind
+        st_file_path = self.jobfile_path + ".status"
+        if os.path.exists(st_file_path):
+            os.unlink(st_file_path)
+
         if not self.local:
             # direct the local jobfile across the ssh tunnel via stdin
             command = command + ' < ' + self.local_jobfile_path
@@ -249,18 +261,13 @@ class job_submit(object):
                 str(self.jobconfig.get('absolute submit number')) + '(' + \
                 str(self.jobconfig.get('submission try number')) + ',' + \
                 str( self.jobconfig.get('try number')) + '):', command
-        try:
-            # "close_fds=True" required here to prevent the process from
-            # hanging on to the file descriptor that was used to write the job
-            # script, the root cause of the random "text file busy" error.
-            p = Popen( command, shell=True, stdout=PIPE, stderr=PIPE,
-                       close_fds=True )
-        except OSError, e:
-            if debug:
-                raise
-            print >> sys.stderr, "ERROR:", e
-            print >> sys.stderr, "ERROR: Job submission failed"
-            print >> sys.stderr, "Use --debug to abort cylc with an exception traceback."
-            p = None
-        return p
+
+        # Exceptions raised here are caught in batch_submit and will
+        # result in the task being put in the 'submit-failed' state.
+
+        # "close_fds=True" is required here to prevent the process from
+        # hanging on to the file descriptor that was used to write the
+        # job script, the root cause of the random "text file busy" error.
+        
+        return Popen( command, shell=True, stdout=PIPE, stderr=PIPE, close_fds=True )
 

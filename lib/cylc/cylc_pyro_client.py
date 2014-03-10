@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -28,15 +28,15 @@ from time import sleep
 from passphrase import passphrase
 from owner import user
 from port_file import port_retriever
+import flags
 
 class client( object ):
     def __init__( self, suite, pphrase=None, owner=user, host=get_hostname(),
-            pyro_timeout=None, port=None, verbose=False ):
+            pyro_timeout=None, port=None ):
         self.suite = suite
         self.owner = owner
         self.host = host
         self.port = port
-        self.verbose = verbose
         if pyro_timeout:
             self.pyro_timeout = float(pyro_timeout)
         else:
@@ -45,15 +45,15 @@ class client( object ):
 
     def get_proxy( self, target ):
         if self.port:
-            if self.verbose:
+            if flags.verbose:
                 print "Port number given:", self.port
         else:
-            self.port = port_retriever( self.suite, self.host, self.owner, self.verbose ).get()
+            self.port = port_retriever( self.suite, self.host, self.owner ).get()
 
         # get a pyro proxy for the target object
         objname = self.owner + '.' + self.suite + '.' + target
 
-        uri = 'PYROLOC://' + self.host + ':' + str(self.port) + '/' + objname 
+        uri = 'PYROLOC://' + self.host + ':' + str(self.port) + '/' + objname
         # callers need to check for Pyro.NamingError if target object not found:
         proxy = Pyro.core.getProxyForURI(uri)
 

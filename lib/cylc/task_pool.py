@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -16,29 +16,30 @@
 #C: You should have received a copy of the GNU General Public License
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
 import Queue
 from batch_submit import task_batcher
 from task_types import task
 import flags
+from Pyro.errors import NamingError, ProtocolError
+from cycle_time import ctime_gt
 
 class pool(object):
-    def __init__( self, suite, config, wireless, pyro, log, run_mode, verbose, debug=False ):
+    def __init__( self, suite, config, wireless, pyro, log, run_mode ):
         self.pyro = pyro
         self.run_mode = run_mode
         self.log = log
-        self.verbose = verbose
-        self.debug = debug
-        self.qconfig = config.cfg['scheduling']['queues'] 
+        self.qconfig = config.cfg['scheduling']['queues']
         self.config = config
         self.assign()
         self.wireless = wireless
 
         self.jobqueue = Queue.Queue()
 
-        self.worker = task_batcher( 'Job Submission', self.jobqueue, 
+        self.worker = task_batcher( 'Job Submission', self.jobqueue,
                 config.cfg['cylc']['job submission']['batch size'],
                 config.cfg['cylc']['job submission']['delay between batches'],
-                self.wireless, self.run_mode, self.verbose )
+                self.wireless, self.run_mode )
 
         self.worker.start()
 
@@ -66,7 +67,15 @@ class pool(object):
             self.queues = self.new_queues
 
     def add( self, itask ):
-        """Add the given new task if one with the same ID does not already exist"""
+        """
+        Add the given new task if one with the same ID does not already
+        exist, and if the task has not passed its own stop cycle (if it
+        has a stop cycle).
+        """
+        if itask.stop_c_time and ctime_gt( itask.c_time, itask.stop_c_time ):
+            self.log.warning( itask.id + ' not adding to pool: task beyond its own stop cycle' )
+            return False
+
         if self.id_exists( itask.id ):
             # This can happen by manual insertion of task that is
             # already in the pool, or if an inserted cycling task
@@ -77,7 +86,7 @@ class pool(object):
         try:
             self.pyro.connect( itask.message_queue, itask.id )
         except Exception, x:
-            if self.debug:
+            if flags.debug:
                 raise
             print >> sys.stderr, x
             self.log.warning( itask.id + ' cannot be added (use --debug and see stderr)' )
@@ -108,7 +117,7 @@ class pool(object):
         # remove task from its queue
         queue = self.myq[task.name]
         self.queues[queue].remove( task )
-        msg = "task proxy removed" 
+        msg = "task proxy removed"
         if reason:
             msg += " (" + reason + ")"
         task.log( 'DEBUG', msg )
@@ -134,9 +143,9 @@ class pool(object):
         """
         1) queue tasks that are ready to run (prerequisites satisfied,
         clock-trigger time up) or if their manual trigger flag is set.
-        
+
         2) then submit queued tasks if their queue limit has not been
-        reached or their manual trigger flag is set.  
+        reached or their manual trigger flag is set.
 
         The "queued" task state says the task will submit as soon as its
         internal queue allows (or immediately if manually triggered first).
@@ -170,7 +179,7 @@ class pool(object):
             n_limit = self.qconfig[queue]['limit']
             if n_limit:
                 for itask in self.queues[queue]:
-                    if itask.state.is_currently('submitting','submitted','running'):
+                    if itask.state.is_currently('ready','submitted','running'):
                         n_active += 1
                 n_release = n_limit - n_active
 
@@ -188,10 +197,9 @@ class pool(object):
 
         n_ready = len(readytogo)
         if n_ready > 0:
-            #print
-            #print n_ready, 'task(s) ready'
+            self.log.debug( '%d task(s) ready' % n_ready )
             for itask in readytogo:
-                itask.set_state_submitting()
+                itask.set_state_ready()
                 self.jobqueue.put( itask )
 
         return readytogo

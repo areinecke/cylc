@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -61,7 +61,7 @@ class broadcast( Pyro.core.ObjBase ):
         # prune until no further changes
         while _prune( target ):
             continue
- 
+
     def addict( self, target, source ):
         for key, val in source.items():
             if isinstance( val, dict ):
@@ -101,37 +101,28 @@ class broadcast( Pyro.core.ObjBase ):
             return self.settings
         name, tag = task_id.split( TaskID.DELIM )
 
-        apply = {}
+        ret = {}
+        # The order is:
+        #    all:root -> all:FAM -> ... -> all:task
+        # -> tag:root -> tag:FAM -> ... -> tag:task
         for cycle in [ 'all-cycles', tag ]:
-            # 'all-cycles' first so it can be overridden by specific cycle
             if cycle not in self.settings:
                 continue
-            nslist = []
-            for ns in self.linearized_ancestors[name]:
+            for ns in reversed(self.linearized_ancestors[name]):
                 if ns in self.settings[cycle]:
-                    nslist.append( ns )
-            # nslist contains namespaces from current broadcast settings
-            # that are in the task's family tree, in linearized ancestor
-            # order, e.g. ['ops_atovs', 'OPS', 'root' ] means a
-            # broadcast setting is in place for root, OPS, and
-            # ops_atovs. Use the highest level one (i.e. a task specific
-            # setting takes precedence over root or mid-level
-            # namespaces).
-            if nslist:
-                self.addict( apply, self.settings[cycle][nslist[0]] )
-
-        return apply
+                    self.addict( ret, self.settings[cycle][ns] )
+        return ret
 
     def expire( self, cutoff ):
         """Clear all settings targetting cycle times earlier than cutoff."""
         if not cutoff:
-            self.log.info( 'Expiring all broadcast settings now' ) 
+            self.log.info( 'Expiring all broadcast settings now' )
             self.settings = {}
         for ctime in self.settings.keys():
             if ctime == 'all-cycles':
                 continue
             elif ctime < cutoff:
-                self.log.info( 'Expiring ' + ctime + ' broadcast settings now' ) 
+                self.log.info( 'Expiring ' + ctime + ' broadcast settings now' )
                 del self.settings[ ctime ]
 
     def clear( self, namespaces, tags ):
@@ -142,7 +133,7 @@ class broadcast( Pyro.core.ObjBase ):
             # clear all settings
             self.settings = {}
         elif tags:
-            # clear all settings specific to given tags 
+            # clear all settings specific to given tags
             for tag in tags:
                 try:
                     del self.settings[tag]
@@ -173,7 +164,7 @@ class broadcast( Pyro.core.ObjBase ):
                 d.to_run = False
         self.new_settings = False
         return ops
-    
+
     def get_dump( self ):
         # return the broadcast variables as written to the suite state dump file
         return pickle.dumps( self.settings ) + '\n'

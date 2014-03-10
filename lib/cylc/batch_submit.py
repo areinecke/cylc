@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -34,16 +34,15 @@ class QuitThread( Exception ):
 class job_batcher( threading.Thread ):
     "Batch-submit queued subprocesses in parallel, with a delay between batches."
 
-    def __init__( self, queue_name, jobqueue, batch_size, batch_delay, verbose ):
+    def __init__( self, queue_name, jobqueue, batch_size, batch_delay ):
         threading.Thread.__init__(self)
-        self.thread_id = str(self.getName()) 
+        self.thread_id = str(self.getName())
 
-        self.queue_name = queue_name 
+        self.queue_name = queue_name
         self.jobqueue = jobqueue
         self.batches = []
         self.batch_size = int( batch_size )
         self.batch_delay = int( batch_delay )
-        self.verbose = verbose
 
         self.log = logging.getLogger( 'main' )
         # The quit flag allows the thread to exit
@@ -83,7 +82,7 @@ class job_batcher( threading.Thread ):
         count = 0
         while count <= seconds:
             self.do_quit()
-            time.sleep(1) 
+            time.sleep(1)
             count += 1
 
     def run( self ):
@@ -106,9 +105,9 @@ class job_batcher( threading.Thread ):
                         break
                 if len(batch) > 0:
                     self.batches.append( batch )
-    
+
                 # submit each batch in sequence
-                n = len(self.batches) 
+                n = len(self.batches)
                 i = 0
                 while True:
                     self.do_quit()
@@ -121,7 +120,7 @@ class job_batcher( threading.Thread ):
                     else:
                         # some batches left
                         self.do_batch_delay( self.batch_delay )
-    
+
                 # main loop sleep for the thread:
                 time.sleep( 1 )
         except QuitThread:
@@ -213,11 +212,15 @@ class job_batcher( threading.Thread ):
         res = p.poll()
         if res is not None:
             jobinfo['out'], jobinfo['err'] = p.communicate()
-            for handle, key in [(sys.stderr, "err"), (sys.stdout, "out")]:
-                if jobinfo[key]:
-                    for line in jobinfo[key].splitlines():
+            out, err = self.follow_up_item_process_output( jobinfo )
+            for handle, text in [(sys.stderr, err), (sys.stdout, out)]:
+                if text:
+                    for line in text.splitlines():
                         print >>handle, "[%s] %s" % (jobinfo["descr"], line)
         return res
+
+    def follow_up_item_process_output( self, jobinfo ):
+        return jobinfo['out'], jobinfo['err']
 
     def item_succeeded_hook( self, jobinfo ):
         #self.log.info( jobinfo['descr'] + ' succeeded' )
@@ -234,8 +237,8 @@ class task_batcher( job_batcher ):
     # sending fake task messages to be processed in the main thread - we
     # need to avoid making direct task state changes here.
 
-    def __init__( self, queue_name, jobqueue, batch_size, batch_delay, wireless, run_mode, verbose ):
-        job_batcher.__init__( self, queue_name, jobqueue, batch_size, batch_delay, verbose ) 
+    def __init__( self, queue_name, jobqueue, batch_size, batch_delay, wireless, run_mode ):
+        job_batcher.__init__( self, queue_name, jobqueue, batch_size, batch_delay )
         self.run_mode = run_mode
         self.wireless = wireless
         self.empty_before_exit = False
@@ -274,9 +277,19 @@ class task_batcher( job_batcher ):
             #  p.stderr.readline() blocks until the process
             #  finishes because nothing is written to stderr.
             res = 0
-        else: 
+        else:
             res = job_batcher.follow_up_item( self, jobinfo )
         return res
+
+    def follow_up_item_process_output( self, jobinfo ):
+        """See if we need to filter our output to stdout/stderr."""
+        out, err = jobinfo['out'], jobinfo['err']
+        if jobinfo.get('data') is not None:
+            launcher = jobinfo['data'][1]
+            if hasattr(launcher, 'filter_output'):
+                # Launcher has a filter method.
+                out, err = launcher.filter_output(out, err)
+        return out, err
 
     def item_succeeded_hook( self, jobinfo ):
         if self.run_mode == 'simulation':
@@ -303,21 +316,21 @@ class task_batcher( job_batcher ):
         if err:
             itask.message_queue.put( 'WARNING', err )
         itask.message_queue.put( 'CRITICAL', itask.id + ' submission failed' )
- 
+
 
 class event_batcher( job_batcher ):
     """Batched execution of task event handlers; item is (event-label,
     handler, task-id, message). We do not capture the output of event
     handlers as doing so could block the thread."""
 
-    def __init__( self, queue_name, jobqueue, batch_size, batch_delay, suite, verbose ):
-        job_batcher.__init__( self, queue_name, jobqueue, batch_size, batch_delay, verbose ) 
+    def __init__( self, queue_name, jobqueue, batch_size, batch_delay, suite ):
+        job_batcher.__init__( self, queue_name, jobqueue, batch_size, batch_delay )
         self.suite = suite
 
     def submit_item( self, item, jobinfo ):
         event, handler, taskid, msg = item
         jobinfo['descr'] = taskid + ' ' + event + ' handler'
-        command = cv_scripting_sl + "; " + " ".join( [handler, "'" + event + "'", self.suite, taskid, "'" + msg + "'"] )
+        command = " ".join( [handler, "'" + event + "'", self.suite, taskid, "'" + msg + "'"] )
         try:
             jobinfo['p'] = subprocess.Popen( command, shell=True )
         except OSError, e:
@@ -331,8 +344,8 @@ class event_batcher( job_batcher ):
 class poll_and_kill_batcher( job_batcher ):
     """Batched submission of task poll and kill commands."""
 
-    def __init__( self, queue_name, jobqueue, batch_size, batch_delay, run_mode, verbose ):
-        job_batcher.__init__( self, queue_name, jobqueue, batch_size, batch_delay, verbose ) 
+    def __init__( self, queue_name, jobqueue, batch_size, batch_delay, run_mode ):
+        job_batcher.__init__( self, queue_name, jobqueue, batch_size, batch_delay )
         self.run_mode = run_mode
 
     def process_batch( self, batch, i, n ):

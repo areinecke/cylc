@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ class async( cycler ):
     @classmethod
     def offset( cls, tag, n ):
         return str(int(tag)-int(n))
- 
+
     def __init__( self, *args ):
         pass
 
@@ -33,6 +33,9 @@ class async( cycler ):
 
     def get_min_cycling_interval( self ):
         return None
+
+    def prev( self, tag ):
+        return str( int(tag) - 1 )
 
     def next( self, tag ):
         return str( int(tag) + 1 )

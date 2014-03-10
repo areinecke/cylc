@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 import os, sys
 from optparse import OptionParser
 from cylc.mkdir_p import mkdir_p
+import cylc.flags
 
 parser = OptionParser( usage = """cylc [util] checkvars [OPTIONS] VARNAMES
 
@@ -27,7 +28,7 @@ and then optionally check their values according to the chosen
 commandline option. Note that THE VARIABLES MUST BE EXPORTED AS THIS
 SCRIPT NECESSARILY EXECUTES IN A SUBSHELL.
 
-All of the input variables are checked in turn and the results printed. 
+All of the input variables are checked in turn and the results printed.
 If any problems are found then, depending on use of '-w,--warn-only',
 this script either aborts with exit status 1 (error) or emits a stern
 warning and exits with status 0 (success).
@@ -35,37 +36,38 @@ warning and exits with status 0 (success).
 Arguments:
    VARNAMES     Space-separated list of environment variable names.""")
 
-parser.add_option( "-d", "--dirs-exist", 
-        help="Check that the variables refer to directories that exist.", 
+parser.add_option( "-d", "--dirs-exist",
+        help="Check that the variables refer to directories that exist.",
         action="store_true", default=False, dest="checkdirs" )
 
-parser.add_option( "-c", "--create-dirs", 
+parser.add_option( "-c", "--create-dirs",
         help="Attempt to create the directories referred to by the "
         "variables, if they do not already exist.",
         action="store_true", default=False, dest="createdirs" )
 
-parser.add_option( "-p", "--create-parent-dirs", 
+parser.add_option( "-p", "--create-parent-dirs",
         help="Attempt to create the parent directories of files "
         "referred to by the variables, if they do not already exist.",
         action="store_true", default=False, dest="createparentdirs" )
 
-parser.add_option( "-f", "--files-exist", 
-        help="Check that the variables refer to files that exist.", 
+parser.add_option( "-f", "--files-exist",
+        help="Check that the variables refer to files that exist.",
         action="store_true", default=False, dest="checkfiles" )
 
 parser.add_option( "-i", "--int",
-        help="Check that the variables refer to integer values.", 
+        help="Check that the variables refer to integer values.",
         action="store_true", default=False, dest="checkint" )
 
-parser.add_option( "-s", "--silent", 
-        help="Do not print the result of each check.", 
+parser.add_option( "-s", "--silent",
+        help="Do not print the result of each check.",
         action="store_false", default=True, dest="verbose" )
 
-parser.add_option( "-w", "--warn-only", 
-        help="Print a warning instead of aborting with error status.", 
+parser.add_option( "-w", "--warn-only",
+        help="Print a warning instead of aborting with error status.",
         action="store_true", default=False, dest="warnonly" )
 
 (options, args) = parser.parse_args()
+cylc.flags.verbose = options.verbose
 
 if len( args ) == 0:
     parser.error( "VARNAMES argument is required" )
@@ -87,12 +89,12 @@ for varname in varnames:
     if varname in os.environ:
         value = os.environ[ varname ]
 
-        if options.verbose:
+        if cylc.flags.verbose:
             print '$' + varname, "evaluates to", value
 
         if options.createdirs:
             if os.path.isdir( value ):
-                if options.verbose:
+                if cylc.flags.verbose:
                     print '(directory exists)'
             else:
                 try:
@@ -108,7 +110,7 @@ for varname in varnames:
         if options.createparentdirs:
             parent = os.path.dirname( value )
             if os.path.isdir( parent ):
-                if options.verbose:
+                if cylc.flags.verbose:
                     print '(parent directory exists)'
             else:
                 try:
@@ -123,20 +125,20 @@ for varname in varnames:
 
         if options.checkdirs:
             if os.path.isdir( value ):
-                if options.verbose:
+                if cylc.flags.verbose:
                     print '(directory exists)'
             else:
                 failed = True
-                if options.verbose:
+                if cylc.flags.verbose:
                     print >> sys.stderr, ALERT, 'directory not found:', value
 
         if options.checkfiles:
             if os.path.isfile( value ):
-                if options.verbose:
+                if cylc.flags.verbose:
                     print '(file exists)'
             else:
                 failed = True
-                if options.verbose:
+                if cylc.flags.verbose:
                     print >> sys.stderr, ALERT, 'file not found:', value
 
         if options.checkint:
@@ -147,14 +149,14 @@ for varname in varnames:
                 int( value )
             except:
                 failed = True
-                if options.verbose:
+                if cylc.flags.verbose:
                     print >> sys.stderr, ALERT, 'value is not an integer:', value
             else:
-                if options.verbose:
+                if cylc.flags.verbose:
                     print '(is an integer)'
     else:
         failed = True
-        if options.verbose:
+        if cylc.flags.verbose:
             print >> sys.stderr, ALERT, 'variable not defined: $' + varname
 
 if failed:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -27,6 +27,8 @@ class cycling_daemon( oneoff, cycling ):
     # registered patterns come in. The corresponding real task may keep
     # running indefinitely, e.g. to watch for incoming external data.
 
+    is_daemon = True
+
     def __init__( self, state, validate=False ):
 
         m = re.match( '(\d{10}) \| (.*)', state )
@@ -42,7 +44,7 @@ class cycling_daemon( oneoff, cycling ):
 
 
     def process_incoming_message( self, (priority,message) ):
-        # intercept incoming messages and check for a pattern match 
+        # intercept incoming messages and check for a pattern match
         for pattern in self.output_patterns:
             m = re.match( pattern, message )
             if m:
@@ -56,6 +58,3 @@ class cycling_daemon( oneoff, cycling ):
         # Write state information to the state dump file
         # This must be compatible with __init__() on reload
         FILE.write( self.id + ' : ' + self.last_reported + ' | ' + self.state.dump() + '\n' )
-
-    def is_daemon( self ):
-        return True

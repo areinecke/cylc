@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 import gtk
 import os, re
 import gobject
-from xstateview import GraphUpdater
+from GraphUpdater import GraphUpdater
 from warning_dialog import warning_dialog, info_dialog
 from cylc.cycle_time import ct
 from cylc.cylc_xdot import xdot_widgets
@@ -65,21 +65,17 @@ Dependency graph suite control interface.
     def toggle_graph_disconnect( self, w, update_button ):
         if w.get_active():
             self.t.graph_disconnect = True
-            w.set_image( gtk.image_new_from_stock( gtk.STOCK_DISCONNECT,
-                                                   gtk.ICON_SIZE_SMALL_TOOLBAR ) )
             self._set_tooltip( w, "Click to reconnect" )
             update_button.set_sensitive(True)
         else:
             self.t.graph_disconnect = False
-            w.set_image( gtk.image_new_from_stock( gtk.STOCK_CONNECT,
-                                                   gtk.ICON_SIZE_SMALL_TOOLBAR ) )
             self._set_tooltip( w, "Click to disconnect" )
             update_button.set_sensitive(False)
         return True
 
     def graph_update( self, w ):
         self.t.action_required = True
- 
+
     def on_url_clicked( self, widget, url, event ):
         if event.button != 3:
             return False
@@ -111,10 +107,10 @@ Dependency graph suite control interface.
         if m:
             #print 'BASE GRAPH'
             task_id = m.groups()[0]
-            #warning_dialog( 
+            #warning_dialog(
             #        task_id + "\n"
             #        "This task is part of the base graph, taken from the\n"
-            #        "suite config file (suite.rc) dependencies section, \n" 
+            #        "suite config file (suite.rc) dependencies section, \n"
             #        "but it does not currently exist in the running suite." ).warn()
             self.xdot.widget.set_tooltip_text(self.t.get_summary(task_id))
             return False
@@ -146,19 +142,19 @@ Dependency graph suite control interface.
         group_item = gtk.ImageMenuItem( 'Group' )
         img = gtk.image_new_from_stock( 'group', gtk.ICON_SIZE_MENU )
         group_item.set_image(img)
-        group_item.set_sensitive( name not in self.t.group )
+        group_item.set_sensitive( not self.t.have_leaves_and_feet or name not in self.t.feet )
         group_item.connect( 'activate', self.grouping, name, True )
 
         ungroup_item = gtk.ImageMenuItem( 'UnGroup' )
         img = gtk.image_new_from_stock( 'ungroup', gtk.ICON_SIZE_MENU )
         ungroup_item.set_image(img)
-        ungroup_item.set_sensitive( name not in self.t.ungroup )
+        ungroup_item.set_sensitive( not self.t.have_leaves_and_feet or name not in self.t.leaves )
         ungroup_item.connect( 'activate', self.grouping, name, False )
 
         ungroup_rec_item = gtk.ImageMenuItem( 'Recursive UnGroup' )
         img = gtk.image_new_from_stock( 'ungroup', gtk.ICON_SIZE_MENU )
         ungroup_rec_item.set_image(img)
-        ungroup_rec_item.set_sensitive( not self.t.ungroup_recursive )
+        ungroup_rec_item.set_sensitive( not self.t.have_leaves_and_feet or name not in self.t.leaves )
         ungroup_rec_item.connect( 'activate', self.grouping, name, False, True )
 
         title_item = gtk.MenuItem( 'Task: ' + task_id.replace("_", "__") )
@@ -174,7 +170,7 @@ Dependency graph suite control interface.
             menu.append( insert_item )
             insert_item.connect( 'button-press-event',
                                 lambda *a: self.insert_task_popup(
-                                           is_fam=(name in self.t.descendants), 
+                                           is_fam=(name in self.t.descendants),
                                            name=name, tag=ctime ))
             menu.append( gtk.SeparatorMenuItem() )
 
@@ -210,16 +206,18 @@ Dependency graph suite control interface.
         self.t.group_all = False
         self.t.ungroup_all = False
         if group:
-            self.t.group.append(name)
+            self.t.group = [name]
+            self.t.ungroup = []
         else:
-            self.t.ungroup.append(name)
+            self.t.ungroup = [name]
+            self.t.group = []
         self.t.action_required = True
         self.t.best_fit = True
 
     def rearrange( self, col, n ):
         cols = self.ttreeview.get_columns()
         for i_n in range(len(cols)):
-            if i_n == n: 
+            if i_n == n:
                 cols[i_n].set_sort_indicator(True)
             else:
                 cols[i_n].set_sort_indicator(False)
@@ -228,7 +226,7 @@ Dependency graph suite control interface.
             col.set_sort_order(gtk.SORT_DESCENDING)
         else:
             col.set_sort_order(gtk.SORT_ASCENDING)
-        self.ttreestore.set_sort_column_id(n, col.get_sort_order()) 
+        self.ttreestore.set_sort_column_id(n, col.get_sort_order())
 
     def get_menuitems( self ):
         """Return the menu items specific to this view."""
@@ -265,16 +263,18 @@ Dependency graph suite control interface.
         items.append( self.menu_ungroup_item )
         self.menu_ungroup_item.connect( 'activate', self.group_all, False )
 
-        menu_landscape_item = gtk.CheckMenuItem( '_Landscape Mode' )
-        items.append( menu_landscape_item )
-        menu_landscape_item.set_active( self.t.orientation == "LR" )
-        menu_landscape_item.connect( 'activate', self.toggle_landscape_mode )
+        menu_left_to_right_item = gtk.CheckMenuItem(
+            '_Left-to-right Graphing' )
+        items.append( menu_left_to_right_item )
+        menu_left_to_right_item.set_active( self.t.orientation == "LR" )
+        menu_left_to_right_item.connect( 'activate',
+                                         self.toggle_left_to_right_mode )
 
         igsui_item = gtk.CheckMenuItem( '_Ignore Suicide Triggers' )
         items.append( igsui_item )
         igsui_item.set_active( self.t.ignore_suicide )
         igsui_item.connect( 'activate', self.toggle_ignore_suicide_triggers )
- 
+
         return items
 
     def _set_tooltip( self, widget, tip_text ):
@@ -292,17 +292,19 @@ Dependency graph suite control interface.
         self.group_toolbutton = gtk.ToolButton()
         g_image = gtk.image_new_from_stock( 'group', gtk.ICON_SIZE_SMALL_TOOLBAR )
         self.group_toolbutton.set_icon_widget( g_image )
+        self.group_toolbutton.set_label( "Group" )
         self.group_toolbutton.connect( 'clicked', self.group_all, True )
         self._set_tooltip( self.group_toolbutton, "Graph View - Click to group all task families" )
         items.append( self.group_toolbutton )
- 
+
         self.ungroup_toolbutton = gtk.ToolButton()
         g_image = gtk.image_new_from_stock( 'ungroup', gtk.ICON_SIZE_SMALL_TOOLBAR )
         self.ungroup_toolbutton.set_icon_widget( g_image )
+        self.ungroup_toolbutton.set_label( "Ungroup" )
         self.ungroup_toolbutton.connect( 'clicked', self.group_all, False )
         self._set_tooltip( self.ungroup_toolbutton, "Graph View - Click to ungroup all task families" )
         items.append( self.ungroup_toolbutton )
- 
+
         zoomin_button = gtk.ToolButton( gtk.STOCK_ZOOM_IN )
         zoomin_button.connect( 'clicked', self.xdot.widget.on_zoom_in )
         zoomin_button.set_label( None )
@@ -314,7 +316,7 @@ Dependency graph suite control interface.
         zoomout_button.set_label( None )
         self._set_tooltip( zoomout_button, "Graph View - Zoom Out" )
         items.append( zoomout_button )
-        
+
         zoomfit_button = gtk.ToolButton( gtk.STOCK_ZOOM_FIT )
         zoomfit_button.connect('clicked', self.xdot.widget.on_zoom_fit)
         zoomfit_button.set_label( None )
@@ -326,27 +328,26 @@ Dependency graph suite control interface.
         zoom100_button.set_label( None )
         self._set_tooltip( zoom100_button, "Graph View - Normal Size" )
         items.append( zoom100_button )
-       
-        connect_button = gtk.ToggleButton()
-        image = gtk.image_new_from_stock( gtk.STOCK_CONNECT, gtk.ICON_SIZE_SMALL_TOOLBAR )
-        connect_button.set_image( image )
-        connect_button.set_relief( gtk.RELIEF_NONE )
+
+        connect_button = gtk.ToggleToolButton()
+        image = gtk.image_new_from_stock( gtk.STOCK_DISCONNECT,
+                                          gtk.ICON_SIZE_SMALL_TOOLBAR )
+        connect_button.set_icon_widget( image )
+        connect_button.set_label( "Disconnect" )
         self._set_tooltip( connect_button, "Graph View - Click to disconnect" )
-        connect_item = gtk.ToolItem()
-        connect_item.add( connect_button )
-        items.append( connect_item )
+        items.append( connect_button )
 
         update_button = gtk.ToolButton( gtk.STOCK_REFRESH )
         update_button.connect( 'clicked', self.graph_update )
         update_button.set_label( None )
         update_button.set_sensitive( False )
-        self._set_tooltip( update_button, "Graph View - Update graph" ) 
+        self._set_tooltip( update_button, "Graph View - Update graph" )
         items.append( update_button )
-        
+
         connect_button.connect( 'clicked', self.toggle_graph_disconnect, update_button )
 
         return items
-             
+
     def group_all( self, w, group ):
         if group:
             self.t.group_all = True
@@ -369,8 +370,8 @@ Dependency graph suite control interface.
         self.t.croprunahead = not self.t.croprunahead
         self.t.action_required = True
 
-    def toggle_landscape_mode( self, w ):
-        """Change the orientation of the graph - 'portrait' or 'landscape'."""
+    def toggle_left_to_right_mode( self, w ):
+        """Change the graph to left-to-right or top-to-bottom."""
         if self.t.orientation == "TB":  # Top -> bottom ordering
             self.t.orientation = "LR"  # Left -> right ordering
         elif self.t.orientation == "LR":
@@ -383,7 +384,7 @@ Dependency graph suite control interface.
 
     def filter_popup( self, w ):
         window = gtk.Window()
-        window.modify_bg( gtk.STATE_NORMAL, 
+        window.modify_bg( gtk.STATE_NORMAL,
                 gtk.gdk.color_parse( self.log_colors.get_color()))
         window.set_border_width(5)
         window.set_title( "Task Filtering")
@@ -474,12 +475,12 @@ Dependency graph suite control interface.
             self.t.state_filter = fstates
         else:
             self.t.state_filter = None
-        
+
         self.t.action_required = True
 
     def focused_timezoom_popup( self, w, id ):
         window = gtk.Window()
-        window.modify_bg( gtk.STATE_NORMAL, 
+        window.modify_bg( gtk.STATE_NORMAL,
                 gtk.gdk.color_parse( self.log_colors.get_color()))
         window.set_border_width(5)
         window.set_title( "Cycle-Time Zoom")
@@ -521,7 +522,7 @@ Dependency graph suite control interface.
         reset_button.connect("clicked", self.focused_timezoom_direct, None )
 
         apply_button = gtk.Button( "_Apply" )
-        apply_button.connect("clicked", self.focused_timezoom, 
+        apply_button.connect("clicked", self.focused_timezoom,
                ctime, start_entry, stop_entry )
 
         hbox = gtk.HBox()
@@ -542,7 +543,7 @@ Dependency graph suite control interface.
 
     def graph_timezoom_popup( self, w ):
         window = gtk.Window()
-        window.modify_bg( gtk.STATE_NORMAL, 
+        window.modify_bg( gtk.STATE_NORMAL,
                 gtk.gdk.color_parse( self.log_colors.get_color()))
         window.set_border_width(5)
         window.set_title( "Time Zoom")
@@ -580,7 +581,7 @@ Dependency graph suite control interface.
         reset_button.connect("clicked", self.focused_timezoom_direct, None )
 
         apply_button = gtk.Button( "_Apply" )
-        apply_button.connect("clicked", self.graph_timezoom, 
+        apply_button.connect("clicked", self.graph_timezoom,
                 start_entry, stop_entry )
 
         hbox = gtk.HBox()
@@ -612,14 +613,14 @@ Dependency graph suite control interface.
         self.t.action_required = True
 
 class StandaloneControlGraphApp( ControlGraph ):
-    # For a ControlApp not launched by the gcylc main app: 
+    # For a ControlApp not launched by the gcylc main app:
     # 1/ call gobject.threads_init() on startup
     # 2/ call gtk.main_quit() on exit
 
     def __init__(self, suite, owner, host, port ):
         gobject.threads_init()
         ControlGraph.__init__(self, suite, owner, host, port )
- 
+
     def quit_gcapture( self ):
         for gwindow in self.gcapture_windows:
             if not gwindow.quit_already:

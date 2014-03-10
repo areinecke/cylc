@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -33,9 +33,8 @@ import warnings
 #import pygtk
 #pygtk.require('2.0')
 
-from cylc.global_config import get_global_cfg
-
-from cylc.gui.gcylc_config import config
+from cylc.cfgspec.site import sitecfg
+from cylc.cfgspec.gcylc import gcfg
 from cylc.gui.gsummary import (get_host_suites, get_status_tasks,
                                get_summary_menu, launch_gcylc,
                                launch_gsummary, BaseSummaryTimeoutUpdater)
@@ -56,9 +55,8 @@ class SummaryPanelApplet(object):
         warnings.filterwarnings('ignore', 'use the new', Warning)
         setup_icons()
         if not hosts:
-            gcfg = get_global_cfg()
             try:
-                hosts = gcfg.cfg["suite host scanning"]["hosts"]
+                hosts = sitecfg.get( ["suite host scanning","hosts"] )
             except KeyError:
                 hosts = ["localhost"]
         self.is_compact = is_compact
@@ -109,10 +107,10 @@ class SummaryPanelApplet(object):
 class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
 
     """Update the summary panel applet - subclass of gsummary equivalent."""
-    
+
     IDLE_STOPPED_TIME = 3600  # 1 hour.
     MAX_INDIVIDUAL_SUITES = 5
-    
+
     def __init__(self, hosts, dot_hbox, gcylc_image, is_compact, owner=None,
                  poll_interval=None):
         self.quit = True
@@ -121,9 +119,8 @@ class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
         self.is_compact = is_compact
         self._set_gcylc_image_tooltip()
         self.gcylc_image.set_sensitive(False)
-        self.usercfg = config().cfg
-        self.theme_name = self.usercfg['use theme'] 
-        self.theme = self.usercfg['themes'][self.theme_name]
+        self.theme_name = gcfg.get( ['use theme'] )
+        self.theme = gcfg.get( ['themes', self.theme_name] )
         self.dots = DotMaker(self.theme)
         self.statuses = {}
         self.stop_summaries = {}
@@ -165,7 +162,7 @@ class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
 
         extra_items.append(gsummary_item)
 
-        menu = get_summary_menu(suite_host_tuples, self.usercfg,
+        menu = get_summary_menu(suite_host_tuples, 
                                 self.theme_name, self._set_theme,
                                 has_stopped_suites,
                                 self.clear_stopped_suites,
@@ -230,7 +227,7 @@ class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
                     suite_info_tuples = []
                     for suite, host, task_states in suite_host_states_tuples:
                         suite_info_tuples.append((suite, host, status,
-                                                  task_states, is_stopped))                   
+                                                  task_states, is_stopped))
                     self._add_image_box(suite_info_tuples)
         if self.is_compact:
             if not compact_suite_statuses:
@@ -249,7 +246,7 @@ class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
         status_list = []
         suite_host_tuples = []
         for info_tuple in suite_host_info_tuples:
-            suite, host, status, task_states, is_stopped = info_tuple 
+            suite, host, status, task_states, is_stopped = info_tuple
             suite_host_tuples.append((suite, host))
             if not is_stopped:
                 running_status_list.append(status)
@@ -266,7 +263,7 @@ class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
         image_eb._connect_args = suite_host_tuples
         image_eb.connect("button-press-event",
                          self._on_button_press_event)
-        
+
         text_format = "%s - %s - %s"
         long_text_format = text_format + "\n    Tasks: %s\n"
         text = ""
@@ -298,7 +295,7 @@ class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
             image_eb.set_has_tooltip(True)
             image_eb.connect("query-tooltip", self._on_img_tooltip_query,
                              tip_vbox)
-        else: 
+        else:
             self._set_tooltip(image_eb, text)
         self.dot_hbox.pack_start(image_eb, expand=False, fill=False,
                                  padding=1)
@@ -341,7 +338,7 @@ class SummaryPanelAppletUpdater(BaseSummaryTimeoutUpdater):
 
     def _set_theme(self, new_theme_name):
         self.theme_name = new_theme_name
-        self.theme = self.usercfg['themes'][self.theme_name]
+        self.theme = gcfg.get( ['themes', self.theme_name] )
         self.dots = DotMaker(self.theme)
 
     def _set_tooltip(self, widget, text):

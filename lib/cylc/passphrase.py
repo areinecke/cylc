@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ import string
 from mkdir_p import mkdir_p
 from suite_host import get_hostname, is_remote_host
 from owner import user, is_remote_user
+import flags
 
 class SecurityError( Exception ):
     """
@@ -47,11 +48,10 @@ class InvalidPassphraseError( SecurityError ):
     pass
 
 class passphrase(object):
-    def __init__( self, suite, owner=user, host=get_hostname(), verbose=False ):
+    def __init__( self, suite, owner=user, host=get_hostname() ):
         self.suite = suite
         self.owner = owner
         self.host = host
-        self.verbose = verbose
         self.location = None
 
         ### ?? this doesn't matter, we now set permissions explicitly:
@@ -81,8 +81,8 @@ implies a common filesystem or a different remote suite that happens to
 be registered under the same name. User accounts used for remote control
 must therefore install the passphrase in the secondary standard
 locations (below) or use the command line option to explicitly reveal
-the location. Remote tasks with 'ssh messaging = True' look first in the 
-suite definition directory of the suite host, which they know through 
+the location. Remote tasks with 'ssh messaging = True' look first in the
+suite definition directory of the suite host, which they know through
 the variable CYLC_SUITE_DEF_PATH_ON_SUITE_HOST in the task execution
 environment.
 
@@ -181,7 +181,7 @@ that do not actually need the suite definition directory to be installed.
         return self.location
 
     def set_location( self, pfile ):
-        if self.verbose:
+        if flags.verbose:
             print 'Passphrase detected at', pfile, 'on', user + '@' + get_hostname()
         self.location = pfile
 
@@ -202,7 +202,7 @@ that do not actually need the suite definition directory to be installed.
         f.close()
         # set passphrase file permissions to owner-only
         os.chmod( pfile, 0600 )
-        if self.verbose:
+        if flags.verbose:
             print 'Generated suite passphrase file on', user + '@' + get_hostname() + ':', pfile
 
     def get( self, pfile=None, suitedir=None ):

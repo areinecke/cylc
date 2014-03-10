@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -21,16 +21,17 @@
 import sys
 from daemonize import daemonize
 from version import cylc_version
-from global_config import get_global_cfg
+from cfgspec.site import sitecfg
+import flags
 
 def print_blurb():
     lines = []
     lines.append( " The Cylc Suite Engine [" + cylc_version + "] " )
-    lines.append( " Copyright (C) 2008-2013 Hilary Oliver, NIWA " )
+    lines.append( " Copyright (C) 2008-2014 Hilary Oliver, NIWA " )
 
     lic = """
- This program comes with ABSOLUTELY NO WARRANTY.  It is free software; 
- you are welcome to redistribute it under certain conditions. Details: 
+ This program comes with ABSOLUTELY NO WARRANTY.  It is free software;
+ you are welcome to redistribute it under certain conditions. Details:
   `cylc license conditions'; `cylc license warranty' """
     lines += lic.split('\n')
 
@@ -57,18 +58,17 @@ def main(name, start):
 
     try:
         if server.__class__.__name__ != 'restart':
-            gcfg = get_global_cfg()
-            gcfg.create_cylc_run_tree( server.suite, server.options.verbose )
+            sitecfg.create_cylc_run_tree( server.suite )
         server.configure_pyro()
     except Exception, x:
-        if server.options.debug:
+        if flags.debug:
             raise
         else:
             print >> sys.stderr, x
             sys.exit(1)
- 
+
     # Daemonize the suite
-    if not server.options.no_detach and not server.options.debug:
+    if not server.options.no_detach and not flags.debug:
         daemonize( server.suite, server.port )
 
     try:
@@ -87,9 +87,8 @@ def main(name, start):
             server.shutdown( 'ERROR: ' + str(x) )
         except Exception, y:
             # In case of exceptions in the shutdown method itself
-            print str(y)
-            pass
-        if server.options.debug:
+            traceback.print_exc(y)
+        if flags.debug:
             raise
         else:
             print >> sys.stderr, "THE ERROR WAS:"

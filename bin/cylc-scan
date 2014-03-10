@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
-#C: 
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
+#C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
 #C: the Free Software Foundation, either version 3 of the License, or
@@ -17,7 +17,7 @@
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-if '--use-ssh' in sys.argv[1:]: 
+if '--use-ssh' in sys.argv[1:]:
     sys.argv.remove( '--use-ssh' )
     from cylc.remote import remrun
     if remrun().execute():
@@ -25,23 +25,23 @@ if '--use-ssh' in sys.argv[1:]:
 
 from cylc.port_scan import scan
 from cylc.CylcOptionParsers import cop
-from cylc.global_config import get_global_cfg
+from cylc.cfgspec.site import sitecfg
 
-parser = cop( """cylc [discover] scan [OPTIONS]
-    
-Detect (by port scanning) running cylc suites and lockservers, and 
+parser = cop( """cylc [discovery] scan [OPTIONS]
+
+Detect (by port scanning) running cylc suites and lockservers, and
 print the results. By default only your own running suites will be
 printed.  With --verbose you will also get "Connection Denied" from
 running suites owned by others on the same host.
 
 Simple space-delimited output format for easy parsing:
     SUITE OWNER HOST PORT
-Here's one way to parse 'cylc scan' output by shell script: 
+Here's one way to parse 'cylc scan' output by shell script:
 ________________________________________________________________
 #!/bin/bash
 # parse suite, owner, host, port from 'cylc scan' output lines
 OFIS=$IFS
-IFS=$'\n'; for LINE in $( cylc scan ); do 
+IFS=$'\n'; for LINE in $( cylc scan ); do
     # split on space and assign tokens to positional parameters:
     IFS=$' '; set $LINE
     echo "$1 - $2 - $3 - $4"
@@ -57,13 +57,11 @@ parser.add_option( "--print-ports",
 
 ( options, args ) = parser.parse_args()
 
-gcfg = get_global_cfg(verbose=options.verbose)
 if options.print_ports:
-    base = gcfg.cfg['pyro']['base port']
-    range = gcfg.cfg['pyro']['maximum number of ports']
+    base = sitecfg.get( ['pyro','base port'] )
+    range = sitecfg.get( ['pyro','maximum number of ports'] )
     print base, '<= port <=', base + range
     sys.exit(0)
 
-suites = scan( options.host, options.db, options.pyro_timeout,
-               verbose=options.verbose )
+suites = scan( options.host, options.db, options.pyro_timeout )
 

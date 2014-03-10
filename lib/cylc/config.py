@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -18,20 +18,21 @@
 
 import re, os, sys
 import taskdef
-from cylc.cfgspec.suite_spec import get_expand_nonrt, get_defaults_rt
+from cylc.cfgspec.suite import get_suitecfg
 from envvar import check_varnames, expandvars
 from copy import deepcopy, copy
 from cycle_time import ct, CycleTimeError
-from mkdir_p import mkdir_p
 from output import outputx
 from graphnode import graphnode, GraphNodeError
 from print_tree import print_tree
 from prerequisites.conditionals import TriggerExpressionError
 from regpath import RegPath
 from trigger import triggerx
-from parsec.util import pdeepcopy, poverride, replicate, un_many
+from parsec.util import replicate, pdeepcopy
 from TaskID import TaskID
 from C3MRO import C3
+from parsec.OrderedDict import OrderedDict
+import flags
 
 """
 Parse and validate the suite definition file, do some consistency
@@ -40,7 +41,7 @@ checking, then construct task proxy objects and graph structures.
 
 CLOCK_OFFSET_RE = re.compile('(\w+)\s*\(\s*([-+]*\s*[\d.]+)\s*\)')
 TRIGGER_TYPES = [ 'submit', 'submit-fail', 'start', 'succeed', 'fail', 'finish' ]
- 
+
 try:
     import graphing
 except ImportError:
@@ -67,7 +68,7 @@ class Replacement(object):
 class SuiteConfigError( Exception ):
     """
     Attributes:
-        message - what the problem is. 
+        message - what the problem is.
         TODO - element - config element causing the problem
     """
     def __init__( self, msg ):
@@ -83,16 +84,15 @@ class TaskNotDefinedError( SuiteConfigError ):
 class config( object ):
     def __init__( self, suite, fpath, template_vars=[],
             template_vars_file=None, owner=None, run_mode='live',
-            verbose=False, validation=False, strict=False, collapsed=[],
+            validation=False, strict=False, collapsed=[],
             cli_start_tag=None, is_restart=False, is_reload=False,
-            write_processed_file=True ):
+            write_proc=True ):
 
         self.suite = suite  # suite name
         self.fpath = fpath  # suite definition
         self.fdir  = os.path.dirname(fpath)
         self.owner = owner
         self.run_mode = run_mode
-        self.verbose = verbose
         self.strict = strict
         self.naked_dummy_tasks = []
         self.edges = []
@@ -113,6 +113,9 @@ class config( object ):
         self.cycling_tasks = []
         self.tasks_by_cycler = {}
 
+        self.runahead_limit = None
+        self.default_runahead_limit = None
+
         # runtime hierarchy dicts keyed by namespace name:
         self.runtime = {
                 # lists of parent namespaces
@@ -126,15 +129,18 @@ class config( object ):
                 'descendants' : {},
                 # lists of all descendant namespaces from the first-parent hierarchy
                 # (first parents are collapsible in suite visualization)
-                'first-parent descendants' : {}
+                'first-parent descendants' : {},
                 }
+        # tasks
+        self.leaves = []
+        # one up from root
+        self.feet = []
 
-        # parse, upgrade, validate the suite, but don't expand [runtime]
-        self.cfg = get_expand_nonrt( fpath, template_vars=template_vars,
-                template_vars_file=template_vars_file, do_expand=False,
-                verbose=verbose, is_reload=is_reload,
-                write_processed_file=write_processed_file )
-        self.runtime_defaults = get_defaults_rt()
+        # parse, upgrade, validate the suite, but don't expand with default items
+        self.pcfg = get_suitecfg( fpath, force=is_reload,
+                tvars=template_vars, tvars_file=template_vars_file,
+                write_proc=write_proc )
+        self.cfg = self.pcfg.get(sparse=True)
 
         # allow test suites with no [runtime]:
         if 'runtime' not in self.cfg:
@@ -143,18 +149,18 @@ class config( object ):
         if 'root' not in self.cfg['runtime']:
             self.cfg['runtime']['root'] = {}
 
-        if self.verbose:
+        if flags.verbose:
             print "Expanding [runtime] name lists"
         # If a runtime section heading is a list of names then the
-        # subsequent config applies to each member. 
+        # subsequent config applies to each member.
         for item in self.cfg['runtime'].keys():
             if re.search( ',', item ):
                 # list of task names
                 # remove trailing commas and spaces
                 tmp = item.rstrip(', ')
-                task_names = re.split(', *', tmp )
+                task_names = re.split(' *, *', tmp )
             else:
-                # a single task name 
+                # a single task name
                 continue
             # generate task configuration for each list member
             for name in task_names:
@@ -162,17 +168,23 @@ class config( object ):
             # delete the original multi-task section
             del self.cfg['runtime'][item]
 
-        self.check_env()
+        # check var names before inheritance to avoid repetition
+        self.check_env_names()
 
-        # Do sparse [runtime] inheritance
+        # do sparse inheritance
         self.compute_family_tree()
         self.compute_inheritance()
 
-        #debugging:
-        #self.print_inheritance()
+        #self.print_inheritance() # (debugging)
+
+        # filter task environment variables after inheritance
+        self.filter_env()
+
+        # now expand with defaults
+        self.cfg = self.pcfg.get( sparse=False )
 
         # [special tasks]: parse clock-offsets, and replace families with members
-        if self.verbose:
+        if flags.verbose:
             print "Parsing [special tasks]"
         for type in self.cfg['scheduling']['special tasks']:
             result = copy( self.cfg['scheduling']['special tasks'][type] )
@@ -217,40 +229,12 @@ class config( object ):
         for cfam in self.closed_families:
             if cfam not in self.runtime['descendants']:
                 self.closed_families.remove( cfam )
-                if fromrc and self.verbose:
+                if fromrc and flags.verbose:
                     print >> sys.stderr, 'WARNING, [visualization][collapsed families]: family ' + cfam + ' not defined'
 
         # check for run mode override at suite level
         if self.cfg['cylc']['force run mode']:
             self.run_mode = self.cfg['cylc']['force run mode']
-
-        # suite event hooks
-        if self.run_mode == 'live' or \
-                ( self.run_mode == 'simulation' and not self.cfg['cylc']['simulation mode']['disable suite event hooks'] ) or \
-                ( self.run_mode == 'dummy' and not self.cfg['cylc']['dummy mode']['disable suite event hooks'] ):
-            self.event_handlers = {
-                    'startup'  : self.cfg['cylc']['event hooks']['startup handler'],
-                    'timeout'  : self.cfg['cylc']['event hooks']['timeout handler'],
-                    'shutdown' : self.cfg['cylc']['event hooks']['shutdown handler']
-                    }
-            self.suite_timeout = self.cfg['cylc']['event hooks']['timeout']
-            self.reset_timer = self.cfg['cylc']['event hooks']['reset timer']
-            self.abort_on_timeout = self.cfg['cylc']['event hooks']['abort on timeout']
-            self.abort_if_startup_handler_fails = self.cfg['cylc']['event hooks']['abort if startup handler fails']
-            self.abort_if_timeout_handler_fails = self.cfg['cylc']['event hooks']['abort if timeout handler fails']
-            self.abort_if_shutdown_handler_fails = self.cfg['cylc']['event hooks']['abort if shutdown handler fails']
-        else:
-            self.event_handlers = {
-                    'startup'  : None,
-                    'timeout'  : None,
-                    'shutdown' : None
-                    }
-            self.suite_timeout = None
-            self.reset_timer = False
-            self.abort_on_timeout = None
-            self.abort_if_startup_handler_fails = False
-            self.abort_if_timeout_handler_fails = False
-            self.abort_if_shutdown_handler_fails = False
 
         self.process_directories()
 
@@ -264,9 +248,9 @@ class config( object ):
         self.configure_queues()
 
         # Warn or abort (if --strict) if naked dummy tasks (no runtime
-        # section) are found in graph or queue config. 
+        # section) are found in graph or queue config.
         if len( self.naked_dummy_tasks ) > 0:
-            if self.strict or self.verbose:
+            if self.strict or flags.verbose:
                 print >> sys.stderr, 'WARNING: naked dummy tasks detected (no entry under [runtime]):'
                 for ndt in self.naked_dummy_tasks:
                     print >> sys.stderr, '  +', ndt
@@ -276,25 +260,22 @@ class config( object ):
         if self.validation:
             self.check_tasks()
 
-        # Default visualization start and stop cycles (defined here
-        # rather than in the spec file so we can set a sensible stop
-        # time if only the start time is specified by the user).
-        vizfinal = False
-        vizstart = False
-        if self.cfg['visualization']['initial cycle time']:
-            vizstart = True
-        if self.cfg['visualization']['final cycle time']:
-            vizfinal = True
+        # initial and final cycles for visualization
+        self.cfg['visualization']['initial cycle time'] = \
+                self.cfg['visualization']['initial cycle time'] or \
+                self.cfg['scheduling']['initial cycle time'] or '2999010100'
 
-        if vizstart and vizfinal:
-            pass
-        elif vizstart:
-            self.cfg['visualization']['final cycle time'] = self.cfg['visualization']['initial cycle time']
-        elif vizfinal:
-            self.cfg['visualization']['initial cycle time'] = self.cfg['visualization']['final cycle time']
-        else:
-            self.cfg['visualization']['initial cycle time'] = 2999010100
-            self.cfg['visualization']['final cycle time'] = 2999010123
+        def get_vizstop():
+            if not self.default_runahead_limit:
+                # no cycling tasks
+                return None
+            st = ct( self.cfg['visualization']['initial cycle time'] )
+            st.increment( hours=self.default_runahead_limit )
+            return st.get()
+
+        self.cfg['visualization']['final cycle time'] = \
+                self.cfg['visualization']['final cycle time'] or \
+                get_vizstop() or self.cfg['visualization']['initial cycle time']
 
         ngs = self.cfg['visualization']['node groups']
 
@@ -316,9 +297,9 @@ class config( object ):
             if fam not in ngs:
                 ngs[fam] = [fam] + self.runtime['descendants'][fam]
 
-        if self.verbose:
+        if flags.verbose:
             print "Checking [visualization] node attributes"
-            # 1. node groups should contain valid namespace names 
+            # 1. node groups should contain valid namespace names
             nspaces = self.cfg['runtime'].keys()
             bad = {}
             for ng,mems in ngs.items():
@@ -351,11 +332,18 @@ class config( object ):
         # nodes, whereas the reverse is needed - fixing this would
         # require reordering task_attr in lib/cylc/graphing.py).
 
-    def check_env( self ):
-        # TODO - belongs in parsec
+        self.leaves = self.get_task_name_list()
+        for ns, ancestors in self.runtime['first-parent ancestors'].items():
+            try:
+                foot = ancestors[-2] # one back from 'root'
+            except IndexError:
+                pass
+            else:
+                if foot not in self.feet:
+                    self.feet.append(foot)
 
-        # check environment variables now to avoid checking inherited
-        # variables multiple times.
+    def check_env_names( self ):
+        # check for illegal environment variable names
          bad = {}
          for label in self.cfg['runtime']:
              res = []
@@ -370,6 +358,37 @@ class config( object ):
                  for var in vars:
                      print >> sys.stderr, "  ", var
              raise SuiteConfigError("Illegal env variable name(s) detected" )
+
+    def filter_env( self ):
+        # filter environment variables after sparse inheritance
+        for name, ns in self.cfg['runtime'].items():
+            try:
+                oenv = ns['environment']
+            except KeyError:
+                # no environment to filter
+                continue
+
+            try:
+                fincl = ns['environment filter']['include']
+            except KeyError:
+                # empty include-filter means include all
+                fincl = []
+
+            try:
+                fexcl = ns['environment filter']['exclude']
+            except KeyError:
+                # empty exclude-filter means exclude none
+                fexcl = []
+
+            if not fincl and not fexcl:
+                # no filtering to do
+                continue
+
+            nenv = OrderedDict()
+            for key, val in oenv.items():
+                if ( not fincl or key in fincl ) and key not in fexcl:
+                    nenv[key] = val
+            ns['environment'] = nenv
 
     def compute_family_tree( self ):
         first_parents = {}
@@ -388,6 +407,8 @@ class config( object ):
                 if p not in self.cfg['runtime']:
                     raise SuiteConfigError, "ERROR, undefined parent for " + name +": " + p
             if pts[0] == "None":
+                if len(pts) == 1:
+                    raise SuiteConfigError, "ERROR: null parentage for " + name
                 demoted[name] = pts[1]
                 pts = pts[1:]
                 first_parents[name] = ['root']
@@ -395,7 +416,7 @@ class config( object ):
                 first_parents[name] = [ pts[0] ]
             self.runtime['parents'][name] = pts
 
-        if self.verbose and demoted:
+        if flags.verbose and demoted:
             print "First parent(s) demoted to secondary:"
             for n,p in demoted.items():
                 print " +", p, "as parent of '" + n + "'"
@@ -410,13 +431,13 @@ class config( object ):
         for name in self.cfg['runtime']:
             ancestors = self.runtime['linearized ancestors'][name]
             for p in ancestors[1:]:
-                if p not in self.runtime['descendants']: 
+                if p not in self.runtime['descendants']:
                     self.runtime['descendants'][p] = []
                 if name not in self.runtime['descendants'][p]:
                     self.runtime['descendants'][p].append(name)
             first_ancestors = self.runtime['first-parent ancestors'][name]
             for p in first_ancestors[1:]:
-                if p not in self.runtime['first-parent descendants']: 
+                if p not in self.runtime['first-parent descendants']:
                     self.runtime['first-parent descendants'][p] = []
                 if name not in self.runtime['first-parent descendants'][p]:
                     self.runtime['first-parent descendants'][p].append(name)
@@ -425,7 +446,7 @@ class config( object ):
         #    print name, self.runtime['linearized ancestors'][name]
 
     def compute_inheritance( self, use_simple_method=True ):
-        if self.verbose:
+        if flags.verbose:
             print "Parsing the runtime namespace hierarchy"
 
         results = {}
@@ -443,7 +464,7 @@ class config( object ):
 
             if use_simple_method:
                 # Go up the linearized MRO from root, replicating or
-                # overriding each namespace element as we go. 
+                # overriding each namespace element as we go.
                 for name in hierarchy:
                     replicate( result, self.cfg['runtime'][name] )
                     n_reps += 1
@@ -474,7 +495,7 @@ class config( object ):
                         n_reps += 1
                         # record this mro as already done
                         already_done[i_mro] = result
-    
+
             results[ns] = result
 
         # replace pre-inheritance namespaces with the post-inheritance result
@@ -496,76 +517,47 @@ class config( object ):
         if len(self.cyclers) != 0:
             # runahead limit is only relevant for cycling sections
 
-            rl = self.cfg['scheduling']['runahead limit']
-            if rl:
-                if self.verbose:
-                    print "Configured runahead limit: ", rl, "hours"
-            else:
-                mcis = []
-                offs = []
-                for cyc in self.cyclers:
-                    m = cyc.get_min_cycling_interval()
-                    if m:
-                        mcis.append(m)
-                    o = cyc.get_offset()
-                    if o:
-                        offs.append(o)
-                if len(mcis) > 0:
-                    # set runahead limit twice the minimum cycling interval
-                    rl = 2 * min(mcis)
-                    if len(offs) > 0:
-                        mo = min(offs)
-                        if mo < 0:
-                            # we have future triggers...
-                            if abs(mo) >= rl:
-                                #... that extend past the default rl
-                                # set to offset plus one minimum interval
-                                rl = abs(mo) + min(mcis)
-                if rl:
-                    if self.verbose:
-                        print "Computed runahead limit:", rl, "hours"
-        self.runahead_limit = rl
+            # configured runahead limit
+            crl = self.cfg['scheduling']['runahead limit']
+
+            # computed default runahead limit
+            drl = None
+            mcis = []
+            offs = []
+            for cyc in self.cyclers:
+                m = cyc.get_min_cycling_interval()
+                if m:
+                    mcis.append(m)
+                o = cyc.get_offset()
+                if o:
+                    offs.append(o)
+            if len(mcis) > 0:
+                # set runahead limit twice the minimum cycling interval
+                drl = 2 * min(mcis)
+                if len(offs) > 0:
+                    mo = min(offs)
+                    if mo < 0:
+                        # we have future triggers...
+                        if abs(mo) >= drl:
+                            #... that extend past the default rl
+                            # set to offset plus one minimum interval
+                            drl = abs(mo) + min(mcis)
+        self.default_runahead_limit = drl
+        self.runahead_limit = crl or drl
+        if flags.verbose:
+            print "Runahead limit:", rl, "hours"
 
     def get_runahead_limit( self ):
         # may be None (no cycling tasks)
         return self.runahead_limit
 
-    def get_config_all_tasks( self, args, sparse=False ):
-        res = {}
-        for t in self.get_task_name_list():
-            res[t] = self.get_config( [ 'runtime', t ] + args, sparse )
-        return res
-
     def get_config( self, args, sparse=False ):
-        if args[0] == 'runtime' and not sparse:
-            # load and override runtime defaults
-            if len(args) > 1:
-                # a single namespace
-                target = pdeepcopy( self.runtime_defaults )
-                poverride( target, self.cfg['runtime'][args[1]] )
-                un_many(target)
-                keys = args[2:]
-            else:
-                # all namespaces requested
-                target = {}
-                keys = []
-                for ns in self.cfg['runtime'].keys():
-                    target[ns] = pdeepcopy( self.runtime_defaults )
-                    poverride( target[ns], self.cfg['runtime'][ns] )
-                    un_many(target[ns])
-        else:
-            target = self.cfg
-            keys = args
-        res = target
-        for key in keys:
-            res = res[key]
-        return res
-
+        return self.pcfg.get( args, sparse )
 
     def adopt_orphans( self, orphans ):
         # Called by the scheduler after reloading the suite definition
         # at run time and finding any live task proxies whose
-        # definitions have been removed from the suite. Keep them 
+        # definitions have been removed from the suite. Keep them
         # in the default queue and under the root family, until they
         # run their course and disappear.
         queues = self.cfg['scheduling']['queues']
@@ -577,7 +569,7 @@ class config( object ):
         """ Replace family names with members, in internal queues,
          and remove assigned members from the default queue. """
 
-        if self.verbose:
+        if flags.verbose:
             print "Configuring internal queues"
 
         # NOTE: this method modifies the parsed config dict itself.
@@ -593,7 +585,7 @@ class config( object ):
             qmembers = []
             for qmember in queues[queue]['members']:
                 if qmember in self.runtime['descendants']:
-                    # qmember is a family so replace it with member tasks. Note that 
+                    # qmember is a family so replace it with member tasks. Note that
                     # self.runtime['descendants'][fam] includes sub-families too.
                     for fmem in self.runtime['descendants'][qmember]:
                         if qmember not in qmembers:
@@ -602,7 +594,7 @@ class config( object ):
                             except ValueError:
                                 # no need to check for naked dummy tasks here as
                                 # families are defined by runtime entries.
-                                if self.verbose and fmem not in self.runtime['descendants']:
+                                if flags.verbose and fmem not in self.runtime['descendants']:
                                     # family members that are themselves families should be ignored as we only need tasks in the queues.
                                     print >> sys.stderr, '  WARNING, queue ' + queue + ': ignoring ' + fmem + ' of family ' + qmember + ' (task not used in the graph)'
                             else:
@@ -613,14 +605,14 @@ class config( object ):
                         try:
                             queues['default']['members'].remove( qmember )
                         except ValueError:
-                            if self.verbose:
+                            if flags.verbose:
                                 print >> sys.stderr, '  WARNING, queue ' + queue + ': ignoring ' + qmember + ' (task not used in the graph)'
                             if qmember not in self.cfg['runtime']:
                                 self.naked_dummy_tasks.append( qmember )
                         else:
                             qmembers.append(qmember)
             queues[queue]['members'] = qmembers
-        if self.verbose:
+        if flags.verbose:
             if len( queues.keys() ) > 1:
                 for queue in queues:
                     print "  +", queue, queues[queue]['members']
@@ -663,7 +655,7 @@ class config( object ):
         for key,val in tree.items():
             if val == {}:
                 if 'title' in self.cfg['runtime'][key]:
-                    tree[key] = self.cfg['runtime'][key]['title'] 
+                    tree[key] = self.cfg['runtime'][key]['title']
                 else:
                     tree[key] = 'No title provided'
             elif isinstance(val, dict):
@@ -742,7 +734,7 @@ class config( object ):
                 # check for internal outputs
                 trig.set_special( self.cfg['runtime'][task_name]['outputs'][output_name] )
             except KeyError:
-                # There is no matching output defined under the task runtime section 
+                # There is no matching output defined under the task runtime section
                 if output_name == 'submit':
                     # OK, task:submit
                     trig.set_type('submitted' )
@@ -772,7 +764,7 @@ class config( object ):
 
         if offset:
             trig.set_offset(offset)
-             
+
         if task_name in self.async_oneoff_tasks:
             trig.set_async_oneoff()
         elif task_name in self.async_repeating_tasks:
@@ -783,7 +775,7 @@ class config( object ):
                 raise SuiteConfigError, "ERROR, '" + task_name + "': '" + trig.type + "' triggers not implemented for repeating async tasks"
         elif task_name in self.cycling_tasks:
             trig.set_cycling()
- 
+
         if right in self.cycling_tasks and \
             (task_name in self.cfg['scheduling']['special tasks']['start-up'] or \
                  task_name in self.async_oneoff_tasks ):
@@ -797,15 +789,15 @@ class config( object ):
         # ONLY IF VALIDATING THE SUITE
         # because checking conditional triggers below may be slow for
         # huge suites (several thousand tasks).
-        # Note: 
-        #   (a) self.cfg['runtime'][name] 
+        # Note:
+        #   (a) self.cfg['runtime'][name]
         #       contains the task definition sections of the suite.rc file.
         #   (b) self.taskdefs[name]
         #       contains tasks that will be used, defined by the graph.
         # Tasks (a) may be defined but not used (e.g. commented out of the graph)
         # Tasks (b) may not be defined in (a), in which case they are dummied out.
 
-        if self.verbose:
+        if flags.verbose:
             print "Checking for defined tasks not used in the graph"
             for name in self.cfg['runtime']:
                 if name not in self.taskdefs:
@@ -818,10 +810,13 @@ class config( object ):
             for name in self.cfg['scheduling']['special tasks'][type]:
                 if type == 'clock-triggered':
                     name = re.sub('\(.*\)','',name)
+                elif type == 'sequential':
+                    if name not in self.cycling_tasks:
+                        raise SuiteConfigError, 'ERROR: sequential tasks must be cycling tasks: ' + name
                 if re.search( '[^0-9a-zA-Z_]', name ):
                     raise SuiteConfigError, 'ERROR: Illegal ' + type + ' task name: ' + name
                 if name not in self.taskdefs and name not in self.cfg['runtime']:
-                    raise SuiteConfigError, 'ERROR: special task "' + name + '" is not defined.' 
+                    raise SuiteConfigError, 'ERROR: special task "' + name + '" is not defined.'
 
         try:
             import Pyro.constants
@@ -830,7 +825,7 @@ class config( object ):
             return
 
         # Instantiate tasks and force evaluation of conditional trigger expressions.
-        if self.verbose:
+        if flags.verbose:
             print "Instantiating tasks to check trigger expressions"
         for cyclr in self.tasks_by_cycler:
             # for each graph section
@@ -853,7 +848,7 @@ class config( object ):
                     # classes due to choice of "special task" modifiers
                     # could cause a TypeError.
                     print >> sys.stderr, x
-                    raise SuiteConfigError, '(inconsistent use of special tasks?)' 
+                    raise SuiteConfigError, '(inconsistent use of special tasks?)'
                 except Exception, x:
                     print >> sys.stderr, x
                     raise
@@ -868,13 +863,21 @@ class config( object ):
                     print >> sys.stderr, x
                     raise SuiteConfigError, 'ERROR, ' + name + ': failed to evaluate triggers.'
                 tag = itask.next_tag()
-                if self.verbose:
+                if flags.verbose:
                     print "  + " + itask.id + " ok"
 
-        # TODO - check that any multiple appearance of same task  in
-        # 'special tasks' is valid. E.g. a task can be both
-        # 'sequential' and 'clock-triggered' at the time, but not both
-        # 'model' and 'sequential' at the same time.
+        # Check custom command scripting is not defined for automatic suite polling tasks
+        for l_task in self.suite_polling_tasks:
+            try:
+                cs = self.pcfg.getcfg( sparse=True )['runtime'][l_task]['command scripting']
+            except:
+                pass
+            else:
+                if cs:
+                    print cs
+                    # (allow explicit blanking of inherited scripting)
+                    raise SuiteConfigError( "ERROR: command scripting cannot be defined for automatic suite polling task " + l_task )
+
 
     def get_coldstart_task_list( self ):
         # TODO - automatically determine this by parsing the dependency graph?
@@ -906,11 +909,11 @@ class config( object ):
         line = line_in
         paren_open = ''
         paren_close = ''
-        connector = ' & ' 
+        connector = ' & '
         if orig.endswith( '-all' ):
             pass
         elif orig.endswith( '-any' ):
-            connector = ' | ' 
+            connector = ' | '
             paren_open = '( '
             paren_close = ' )'
         elif orig != '':
@@ -923,7 +926,7 @@ class config( object ):
         m.sort() # put empty offset '' first ...
         m.reverse() # ... then last
         for grp in m:
-            exclam, foffset = grp 
+            exclam, foffset = grp
             if fam not in self.triggering_families:
                 self.triggering_families.append(fam)
             mems = paren_open + connector.join( [ exclam + i + foffset + repl for i in members ] ) + paren_close
@@ -963,7 +966,7 @@ class config( object ):
         # "foo<SUITE::TASK:fail> => bar"  becomes "foo => bar"
         # (and record that foo must automatically poll for TASK in SUITE)
         repl = Replacement( '\\1' )
-        line = re.sub( '(\w+)(<([\w-]+)::(\w+)(:\w+)?>)', repl, line )
+        line = re.sub( '(\w+)(<([\w\.\-]+)::(\w+)(:\w+)?>)', repl, line )
         for item in repl.match_groups:
             l_task, r_all, r_suite, r_task, r_status = item
             if r_status:
@@ -973,10 +976,12 @@ class config( object ):
             self.suite_polling_tasks[ l_task ] = ( r_suite, r_task, r_status, r_all )
 
         # REPLACE FAMILY NAMES WITH MEMBER DEPENDENCIES
-        for fam in self.runtime['descendants']:
+        # Sort so that longer family names get expanded first.
+        # This expands e.g. FOO-BAR before FOO in FOO-BAR:succeed-all => baz.
+        for fam in reversed(sorted(self.runtime['descendants'])):
             members = copy(self.runtime['descendants'][fam])
             for member in copy(members):
-                # (another copy here: don't remove items from the iterating list) 
+                # (another copy here: don't remove items from the iterating list)
                 # remove family names from the member list, leave just tasks
                 # (allows using higher-level family names in the graph)
                 if member in self.runtime['descendants']:
@@ -1006,7 +1011,7 @@ class config( object ):
             if re.search( r"\b" + fam + r"\b[^:].*=>", line ) or re.search( r"\b" + fam + "\s*=>$", line ):
                 # plain family names are not allowed on the left of a trigger
                 print >> sys.stderr, line
-                raise SuiteConfigError, 'ERROR, upstream family triggers must be qualified with \':type\': ' + fam
+                raise SuiteConfigError, 'ERROR, family triggers must be qualified, e.g. ' + fam + ':succeed-all'
 
             # finally replace plain family names on the right of a trigger
             line = self.replace_family_triggers( line, fam, members )
@@ -1020,7 +1025,7 @@ class config( object ):
         # Replace "foo:finish" with "( foo:succeed | foo:fail )"
         line = re.sub(  r'\b(\w+(\[.*?]){0,1}):finish\b', r'( \1:succeed | \1:fail )', line )
 
-        if self.verbose and line != orig_line:
+        if flags.verbose and line != orig_line:
             print 'Graph line substitutions occurred:'
             print '  IN:', orig_line
             print '  OUT:', line
@@ -1030,7 +1035,7 @@ class config( object ):
         # NOTE:  we currently use only one kind of arrow, but to use
         # several kinds we can split the string like this:
         #     tokens = re.split( '\s*(=[>x])\s*', line ) # a => b =x c
-        #     tasks = tokens[0::2]                       # [a, b, c] 
+        #     tasks = tokens[0::2]                       # [a, b, c]
         #     arrow = tokens[1::2]                       # [=>, =x]
 
         # Check for missing task names, e.g. '=> a => => b =>; this
@@ -1056,7 +1061,7 @@ class config( object ):
                     raise SuiteConfigError, "ERROR: Lone node groups cannot contain OR conditionals: " + lexpression
             else:
                 rgroup = tasks[i+1]
-           
+
             if rgroup:
                 # '|' (OR) is not allowed on the right side
                 if re.search( '\|', rgroup ):
@@ -1105,7 +1110,7 @@ class config( object ):
                 bad = []
                 for name in lnames + rights:
                     if name in spec['start-up'] or name in spec['cold-start'] or \
-                            name in spec['sequential'] or name in spec['one-off']:
+                            name in spec['one-off']:
                                 bad.append(name)
                 if len(bad) > 0:
                     print >> sys.stderr, orig_line
@@ -1135,12 +1140,12 @@ class config( object ):
                         if ttype == 'async_oneoff':
                             if name not in self.async_oneoff_tasks:
                                 self.async_oneoff_tasks.append(name)
-                        elif ttype == 'async_repeating': 
+                        elif ttype == 'async_repeating':
                             if name not in self.async_repeating_tasks:
                                 self.async_repeating_tasks.append(name)
                             m = re.match( '^ASYNCID:(.*)$', section )
                             asyncid_pattern = m.groups()[0]
-               
+
                 if not self.validation and not graphing_disabled:
                     # edges not needed for validation
                     self.generate_edges( lexpression, lnames, r, ttype, cyclr, suicide )
@@ -1153,7 +1158,7 @@ class config( object ):
         if re.search( '\|', lexpression ):
             # plot conditional triggers differently
             conditional = True
- 
+
         for left in lnames:
             if left in self.async_oneoff_tasks + self.async_repeating_tasks:
                 sasl = True
@@ -1281,7 +1286,7 @@ class config( object ):
             if not trigger:
                 continue
             if not conditional:
-                self.taskdefs[right].add_trigger( trigger, cycler )  
+                self.taskdefs[right].add_trigger( trigger, cycler )
                 continue
 
             # CONDITIONAL TRIGGERS
@@ -1309,7 +1314,7 @@ class config( object ):
         if countx > 0 and countx != len(cname.keys()):
             print >> sys.stderr, 'ERROR:', lexpression
             raise SuiteConfigError, '(start-up or async) and (cycling) tasks in same conditional'
- 
+
         # Replace some chars for later use in regular expressions.
         expr = re.sub( '[-\[\]:]', '_', lexpression )
         expr = re.sub( '\+', 'x', expr ) # future triggers
@@ -1378,7 +1383,7 @@ class config( object ):
             if hasattr( cyc.__class__, 'is_async' ):
                 # ignore asynchronous tasks
                 continue
-            foo = cyc.initial_adjust_up( start_ctime ) 
+            foo = cyc.initial_adjust_up( start_ctime )
             adjusted.append( foo )
         if len( adjusted ) > 0:
             adjusted.sort()
@@ -1391,15 +1396,13 @@ class config( object ):
 
         for e in self.edges:
             # Get initial cycle time for this cycler
-            ctime = e.cyclr.initial_adjust_up( start_ctime )
+            i_ctime = e.cyclr.initial_adjust_up( start_ctime )
+            ctime = i_ctime
 
             while int(ctime) <= int(stop):
                 # Loop over cycles generated by this cycler
-                
-                if ctime != actual_first_ctime:
-                    not_initial_cycle = True
-                else:
-                    not_initial_cycle = False
+
+                not_initial_cycle = ( ctime != i_ctime )
 
                 r_id = e.get_right(ctime, not_initial_cycle, raw, startup_exclude_list, [])
                 l_id = e.get_left( ctime, not_initial_cycle, raw, startup_exclude_list, [])
@@ -1412,7 +1415,6 @@ class config( object ):
 
                 if l_id != None and not e.sasl:
                     # check that l_id is not earlier than start time
-                    # TODO - does this invalidate r_id too?
                     tmp, lctime = l_id.split()
                     #sct = ct(start_ctime)
                     sct = ct(actual_first_ctime)
@@ -1428,7 +1430,7 @@ class config( object ):
                 ctime = e.cyclr.next( ctime )
 
         return gr_edges
- 
+
     def get_graph( self, start_ctime, stop, raw=False, group_nodes=[],
             ungroup_nodes=[], ungroup_recursive=False, group_all=False,
             ungroup_all=False, ignore_suicide=False ):
@@ -1497,7 +1499,7 @@ class config( object ):
         return nl, nr
 
     def load_graph( self ):
-        if self.verbose:
+        if flags.verbose:
             print "Parsing the dependency graph"
 
         self.graph_found = False
@@ -1517,7 +1519,7 @@ class config( object ):
                     if graph:
                         section = item
                         self.parse_graph( section, graph )
- 
+
     def parse_graph( self, section, graph ):
         self.graph_found = True
 
@@ -1553,7 +1555,7 @@ class config( object ):
         lines = re.split( '\s*\n\s*', graph )
         for xline in lines:
             # strip comments
-            line = re.sub( '#.*', '', xline ) 
+            line = re.sub( '#.*', '', xline )
             # ignore blank lines
             if re.match( '^\s*$', line ):
                 continue
@@ -1563,39 +1565,22 @@ class config( object ):
             # generate pygraphviz graph nodes and edges, and task definitions
             self.process_graph_line( line, section, ttype, cyclr )
 
-        # Check command scripting not defined for automatic suite polling tasks
-        for l_task in self.suite_polling_tasks:
-            try:
-                cs = self.cfg['runtime'][l_task]['command scripting']
-            except:
-                pass
-            else:
-                raise SuiteConfigError( "ERROR: command scripting cannot be defined for automatic suite polling task " + l_task )
 
     def get_taskdef( self, name ):
         # (DefinitionError caught above)
 
-        # get the task runtime
+        # get the dense task runtime
         try:
-            taskcfg = self.cfg['runtime'][name]
+            rtcfg = self.cfg['runtime'][name]
         except KeyError:
             raise SuiteConfigError, "Task not found: " + name
 
-        # Get full dense task [runtime] by applying runtime defaults now.
-        # TODO - this should be done right after sparse inheritance, but
-        # we need to retain sparse config for self.get_config(). Once
-        # inheritance is moved into parsec get-config command should
-        # do its own parsing independent of config.py.
-        rtcfg = pdeepcopy( self.runtime_defaults ) # copy [runtime] default dict
-        poverride( rtcfg, taskcfg )    # override with suite [runtime] settings
-        un_many(rtcfg)
-    
         ict = self.cli_start_tag or self.cfg['scheduling']['initial cycle time']
         # We may want to put in some handling for cases of changing the
         # initial cycle via restart (accidentally or otherwise).
 
         # Get the taskdef object for generating the task proxy class
-        taskd = taskdef.taskdef( name, rtcfg, self.run_mode, ict ) 
+        taskd = taskdef.taskdef( name, rtcfg, self.run_mode, ict )
 
         # TODO - put all taskd.foo items in a single config dict
         # SET ONE-OFF AND COLD-START TASK INDICATORS
@@ -1607,28 +1592,19 @@ class config( object ):
                 name in self.cfg['scheduling']['special tasks']['start-up']:
             taskd.modifiers.append( 'oneoff' )
 
-        # SET SEQUENTIAL TASK INDICATOR
-        if name in self.cfg['scheduling']['special tasks']['sequential']:
-            taskd.modifiers.append( 'sequential' )
-
-        # SET MODEL TASK INDICATOR
-        # (TO DO - can we identify these tasks from the graph?)
-        elif name in self.cfg['scheduling']['special tasks']['explicit restart outputs']:
-            taskd.type = 'tied'
-        else:
-            taskd.type = 'free'
-
         # SET CLOCK-TRIGGERED TASKS
         if name in self.clock_offsets:
             taskd.modifiers.append( 'clocktriggered' )
             taskd.clocktriggered_offset = self.clock_offsets[name]
+
+        taskd.sequential = name in self.cfg['scheduling']['special tasks']['sequential']
 
         foo = copy(self.runtime['linearized ancestors'][ name ])
         foo.reverse()
         taskd.namespace_hierarchy = foo
 
         return taskd
-   
+
     def get_task_proxy( self, name, ctime, state, stopctime, startup, submit_num, exists ):
         try:
             tdef = self.taskdefs[name]

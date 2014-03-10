@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@ import sys
 import datetime
 from cylc.cycle_time import ct
 from task import task
+from cylc.wallclock import now
 
 # TODO - the task base class now has clock-triggering functionality too, to
 # handle retry delays, so this class could probably disappear now to leave
@@ -28,8 +29,7 @@ from task import task
 class clocktriggered(object):
     clock = None
 
-    def is_clock_triggered( self ):
-        return True
+    is_clock_triggered = True
 
     def get_real_time_delay( self ):
         return self.real_time_delay
@@ -39,8 +39,7 @@ class clocktriggered(object):
         # check current time against expected start time
         rt = ct( self.c_time ).get_datetime()
         delayed_start = rt + datetime.timedelta( 0,0,0,0,0,self.real_time_delay,0 )
-        current_time = clocktriggered.clock.get_datetime()
-        if current_time >= delayed_start:
+        if now() >= delayed_start:
            reached = True
         return reached
 

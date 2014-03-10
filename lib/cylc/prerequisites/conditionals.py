@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -36,14 +36,16 @@ class conditional_prerequisites(object):
     def __init__( self, owner_id, ict=None ):
         self.owner_id = owner_id
         self.labels = {}   # labels[ message ] = label
-        self.messages = {}   # messages[ label ] = message 
+        self.messages = {}   # messages[ label ] = message
         self.satisfied = {}    # satisfied[ label ] = True/False
         self.satisfied_by = {}   # self.satisfied_by[ label ] = task_id
+        self.target_tags = []   # list of target cycle times (tags)
         self.auto_label = 0
         self.excess_labels = []
         self.ict = ict
+        self.pre_initial_messages = []
 
-    def add( self, message, label = None ):
+    def add( self, message, label = None, pre_initial = False ):
         # Add a new prerequisite message in an UNSATISFIED state.
         if label:
             # TODO - autolabelling NOT USED? (and is broken because the
@@ -65,6 +67,11 @@ class conditional_prerequisites(object):
         self.messages[ label ] = message
         self.labels[ message ] = label
         self.satisfied[label]  = False
+        m = re.match( self.__class__.TAG_RE, message )
+        if m:
+            self.target_tags.append( m.groups()[0] )
+        if pre_initial:
+            self.pre_initial_messages.append(label)
 
     def get_not_satisfied_list( self ):
         not_satisfied = []
@@ -84,11 +91,15 @@ class conditional_prerequisites(object):
                 task = re.search( r'(.*).(.*) ', self.messages[k])
                 if task.group:
                     try:
-                        if (int(task.group().split(".")[1]) < int(self.ict) and 
+                        if (int(task.group().split(".")[1]) < int(self.ict) and
                             int(task.group().split(".")[1]) != 1):
                             drop_these.append(k)
                     except IndexError:
                         pass
+
+        if self.pre_initial_messages:
+            for k in self.pre_initial_messages:
+                drop_these.append(k)
 
         if drop_these:
             simpler = conditional_simplifier(expr, drop_these)
@@ -99,7 +110,7 @@ class conditional_prerequisites(object):
         for label in self.messages:
             # match label start and end on on word boundary
             expr = re.sub( r'\b' + label + r'\b', 'self.satisfied[\'' + label + '\']', expr )
-            
+
         for label in self.excess_labels:
             # treat duplicate triggers as always satisfied
             expr = re.sub( r'\b' + label + r'\b', 'True', expr )
@@ -126,7 +137,7 @@ class conditional_prerequisites(object):
                     print >> sys.stderr, "(?could be unmatched parentheses in the graph string?)"
                 raise TriggerExpressionError, '"' + self.raw_conditional_expression + '"'
             return res
-            
+
     def satisfy_me( self, outputs ):
         # Can any completed outputs satisfy any of my prequisites?
         for label in self.satisfied:
@@ -159,10 +170,5 @@ class conditional_prerequisites(object):
     def get_target_tags( self ):
         """Return a list of cycle times target by each prerequisite,
         including each component of conditionals."""
-        tags = []
-        for label, msg in self.messages.items():
-            m = re.match( self.__class__.TAG_RE, msg )
-            if m:
-                tags.append( m.groups()[0] )
-        return tags 
+        return self.target_tags
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ class RegPath(object):
         # Suite registration paths may contain [a-zA-Z0-9_.-]. They may
         # not contain colons, which would interfere with PATH variables.
         if re.search( '[^\w.-]', rpath ):
-            raise IllegalRegPathError( rpath ) 
+            raise IllegalRegPathError( rpath )
         # If the path ends in delimiter it must be a group, otherwise it
         # may refer to a suite or a group. NOTE: this information is not
         # currently used.

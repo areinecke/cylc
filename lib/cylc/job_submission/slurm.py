@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@ SLURM job submission.
 
         defaults = {}
         defaults[ '--job-name' ] = self.task_id
-        # Replace literal '$HOME' in stdout and stderr file paths with '' 
+        # Replace literal '$HOME' in stdout and stderr file paths with ''
         # because environment variables are not interpreted in directives.
         # (For remote tasks the local home directory path is replaced
         # with '$HOME' in config.py).

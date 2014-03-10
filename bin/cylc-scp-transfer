@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -29,9 +29,9 @@ usage() {
     echo "ENVIRONMENT VARIABLE INPUTS:"
     echo "\$SRCE  - list of sources (files or directories) as scp URLs."
     echo "\$DEST  - parallel list of targets as scp URLs."
-    echo "The source and destination lists should be space-separated." 
+    echo "The source and destination lists should be space-separated."
     echo ""
-    echo "We let scp determine the validity of source and target URLs." 
+    echo "We let scp determine the validity of source and target URLs."
     echo "Target directories are created pre-copy if they don't exist."
     echo ""
     echo "Options:"

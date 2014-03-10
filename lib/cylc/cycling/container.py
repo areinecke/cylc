@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ class cycon( object ):
     def initial_adjust_up( self, T ):
         adjusted = []
         for cyc in self.cyclers:
-            adj = cyc.initial_adjust_up(T) 
+            adj = cyc.initial_adjust_up(T)
             adjusted.append(adj)
         adjusted.sort()
         return adjusted[0]
@@ -40,6 +40,13 @@ class cycon( object ):
             adjusted.append( cyc.next(T) )
         adjusted.sort()
         return adjusted[0]
+
+    def prev( self, T ):
+        adjusted = []
+        for cyc in self.cyclers:
+            adjusted.append( cyc.prev(T) )
+        adjusted.sort()
+        return adjusted[-1]
 
     def offset( self, T, n ):
         return self.cyclers[0].__class__.offset(T, n)

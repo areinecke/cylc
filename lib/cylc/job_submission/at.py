@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -17,7 +17,10 @@
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from job_submit import job_submit
+import os
 import re
+from signal import SIGKILL
+from subprocess import check_call, Popen, PIPE
 
 class at( job_submit ):
     """
@@ -33,14 +36,19 @@ class at( job_submit ):
            command template = 'echo "%s 1>%s 2>%s" | at now + 2 minutes'
     """
 
-    COMMAND_TEMPLATE = "echo \"%s 1>%s 2>%s\" | at now" # % ( jobfile-path, out, err )
+    # N.B. The perl command ensures that the job script is executed in its own
+    # process group, which allows the job script and its child processes to be
+    # killed correctly.
+    COMMAND_TEMPLATE = (
+            "echo \"perl -e \\\"setpgrp(0,0);exec(@ARGV)\\\" %s 1>%s 2>%s\"" +
+            " | at now") # % ( jobfile-path, out, err )
     REC_ID = re.compile(r"\Ajob\s(?P<id>\S+)\sat")
 
     # atq properties:
     #   * stdout is "job-num date hour queue username", e.g.:
     #      1762 Wed May 15 00:20:00 2013 = hilary
     #   * queue is '=' if running
-    #   
+    #
 
     def construct_jobfile_submission_command( self ):
         """
@@ -52,6 +60,16 @@ class at( job_submit ):
         self.command = command_template % ( self.jobfile_path,
                                             self.stdout_file,
                                             self.stderr_file )
+
+    def filter_output( self, out, err):
+        """Filter the stdout/stderr output - suppress ID stderr message."""
+        new_err = ""
+        if err:
+            for line in err.splitlines():
+                if not self.REC_ID.match(line):
+                    new_err += line + "\n"
+        return out, new_err
+
     def get_id( self, out, err ):
         """
         Extract the job submit ID from job submission command
@@ -62,42 +80,29 @@ class at( job_submit ):
             if match:
                 return match.group("id")
 
-    def get_job_poll_command( self, jid ):
-        """
-        Given the job submit ID, return a command string that uses
-        'cylc get-task-status' to determine current job status:
-           cylc get-job-status <QUEUED> <RUNNING>
-        where:
-            QUEUED  = true if job is waiting or running, else false
-            RUNNING = true if job is running, else false
+    def kill( self, jid, st_file ):
+        """Kill the job."""
+        if os.access(st_file, os.F_OK | os.R_OK):
+            for line in open(st_file):
+                if line.startswith("CYLC_JOB_PID="):
+                    pid = line.strip().split("=", 1)[1]
+                    os.killpg(int(pid), SIGKILL)
+                    # Killing the process group should remove it from the queue
+                    return
+        check_call(["atrm", jid])
 
-        WARNING: 'cylc get-task-status' prints a task status message -
-        the final result - to stdout, so any stdout from scripting prior
-        to the call must be dumped to /dev/null.
-        """
-        status_file = self.jobfile_path + ".status"
-        cmd = ( "RUNNING=false; QUEUED=false; "
-                + "atq | grep " + jid + " >/dev/null; "
-                + "[[ $? == 0 ]] && QUEUED=true;"
-                + "atq | grep " + jid + " | grep = >/dev/null; "
-                + "[[ $? == 0 ]] && RUNNING=true; "
-                + "cylc get-task-status " + status_file + " $QUEUED $RUNNING"  )
-        return cmd
-
-    def get_job_kill_command( self, jid ):
-        """
-        Given the job submit ID, return a command to kill the job.
-        The atrm command removes waiting jobs from the queue but it
-        does not kill jobs that are already running, so we have to
-        determine the job process ID by searching in 'ps' output.
-        """
-        cmd = ( "RUNNING=false; QUEUED=false; "
-                + "atq | grep " + jid + " >/dev/null; "
-                + "[[ $? == 0 ]] && QUEUED=true;"
-                + "atq | grep " + jid + " | grep = >/dev/null; "
-                + "[[ $? == 0 ]] && RUNNING=true; "
-                + "! $QUEUED && echo WARNING job not found && exit 0; "
-                + "! $RUNNING && atrm " + jid + " && exit 0; "
-                + "ps aux | grep " + self.jobfile_path + " | grep -v grep | awk \"{print \$2}\" | xargs kill -9" )
-        return cmd
-
+    def poll( self, jid ):
+        """Return 0 if jid is in the queueing system, 1 otherwise."""
+        proc = Popen(["atq"], stdout=PIPE)
+        if proc.wait():
+            return 1
+        out, err = proc.communicate()
+        # "atq" returns something like this:
+        #     5347	2013-11-22 10:24 a daisy
+        #     499	2013-12-22 16:26 a daisy
+        # "jid" is in queue if it matches column 1 of a row.
+        for line in out.splitlines():
+            items = line.strip().split(None, 1)
+            if items and items[0] == jid:
+                return 0
+        return 1

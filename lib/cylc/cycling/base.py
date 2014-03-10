@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -28,8 +28,8 @@ class CyclerOverrideError( CyclerError ):
 class cycler( object ):
     """Defines the interface that derived classes implement in order for
     cylc to generate tasks with a particular sequence of cycle times.
-    
-    NOTE: in method arguments and return values below: 
+
+    NOTE: in method arguments and return values below:
     * T represents a cycle time in string form (YYYYMMDDHHmmss)
     * CT represents a cycle_time.ct(T) object
 
@@ -63,23 +63,28 @@ class cycler( object ):
         initial cycle time; subsequently next() ensures we stay valid."""
         raise CyclerOverrideError( "initial_adjust_up" )
 
+    def prev( self, T ):
+        """Return the cycle time prior to T. It may be assumed that T is
+        already on sequence."""
+        raise CyclerOverrideError( "next" )
+
     def next( self, T ):
-        """Return the cycle time next in the sequence after T. It may 
+        """Return the cycle time next in the sequence after T. It may
         be assumed that T is already on sequence."""
         raise CyclerOverrideError( "next" )
 
     def get_min_cycling_interval( self ):
-        """Return the smallest interval in HOURS for this cycler.""" 
+        """Return the smallest interval in HOURS for this cycler."""
         raise CyclerOverrideError( "get_min_cycling_interval" )
 
     def get_offset( self ):
-        """Return the offset (input to adjust_state) in HOURS for this cycler.""" 
+        """Return the offset (input to adjust_state) in HOURS for this cycler."""
         raise CyclerOverrideError( "get_offset" )
 
     def adjust_state( self, offset ):
         """Adjust the state variables that define the cycle time sequence
-        to offset the whole sequence. This is used for tasks on the left 
-        of intercycle triggers, e.g. in "A[T-6] => B" implies that task A 
+        to offset the whole sequence. This is used for tasks on the left
+        of intercycle triggers, e.g. in "A[T-6] => B" implies that task A
         runs at cycles 6 hours prior to the cycler sequence."""
         raise CyclerOverrideError( "adjust_state" )
 

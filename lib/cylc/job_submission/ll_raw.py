@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ class ll_raw( job_submit ):
 
         # read original and count '#@ queue' directives, in case is
         # a multiple step loadleveler job
-        queue_re = re.compile( '^\s*#\s*@\s*queue\s*$') 
+        queue_re = re.compile( '^\s*#\s*@\s*queue\s*$')
         FILE = open( orig_file, 'r' )
         lines = FILE.readlines()
         FILE.close()
@@ -51,7 +51,7 @@ class ll_raw( job_submit ):
             if re.match( '^\s*#\s*@\s*queue\s*$', line ):
                 count += 1
                 if not done and count == n_queue_directives:
-                    self.write_environment( JOBFILE ) 
+                    self.write_environment( JOBFILE )
                     self.write_cylc_scripting( JOBFILE )
                     self.write_extra_scripting( JOBFILE )
                     done = True

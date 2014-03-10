@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ def get_stop_state(suite, owner=None, host=None):
         command += " --host=" +host
     if owner:
         command += " --user=" + owner
-    command += " " + suite 
+    command += " " + suite
     try:
         p = subprocess.Popen(command, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
         stdout, stderr = p.communicate()
@@ -56,12 +56,16 @@ def get_stop_state_summary(suite, owner=None, hostname=None, lines=None ):
     for line in list(lines):
         if line.startswith('Remote command'):
             lines.remove(line)
-    [ time_type, time_string ] = lines.pop(0).rstrip().split(' : ')
-    time_string = time_string.rsplit(",")[0]
+    line0 = lines.pop(0)
+    if line0.startswith( 'suite time' ) or \
+            line0.startswith( 'simulation time' ):
+        # backward compatibility with pre-5.4.11 state dumps
+        time_string = line0.rstrip().split(' : ')[1]
+    else:
+        # (line0 is run mode)
+        line1 = lines.pop(0)
+        time_string = line1.rstrip().split(' : ')[1]
 
-    # datetime.strptime() introduced in Python 2.5
-    ##dt = datetime.datetime.strptime(time_string, "%Y:%m:%d:%H:%M:%S")
-    # but is equivalent to this:
     dt = datetime.datetime( *(time.strptime(time_string, "%Y:%m:%d:%H:%M:%S")[0:6]))
 
     global_summary["last_updated"] = dt
@@ -84,7 +88,11 @@ def get_stop_state_summary(suite, owner=None, hostname=None, lines=None ):
                                           "label": tag})
         # reconstruct state from a dumped state string
         items = dict([p.split("=") for p in info.split(', ')])
-        task_summary[task_id].update({"state": items.get("status")})
+        state = items.get("status")
+        if state == 'submitting':
+            # backward compabitility for state dumps generated prior to #787
+            state = 'ready'
+        task_summary[task_id].update({"state": state })
         task_summary[task_id].update({"spawned": items.get("spawned")})
     global_summary["run_mode"] = "dead"
     for key in ["paused", "stopping", "will_pause_at", "will_stop_at"]:

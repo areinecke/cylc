@@ -1,6 +1,6 @@
 #!/bin/bash
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C: 
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 #C: Test cylc get-config
 . $(dirname $0)/test_header
 #-------------------------------------------------------------------------------
-set_test_number 15
+set_test_number 14
 #-------------------------------------------------------------------------------
 init_suite $TEST_NAME_BASE <<'__SUITERC__'
 
@@ -85,30 +85,28 @@ __SUITERC__
 #-------------------------------------------------------------------------------
 TEST_NAME=$TEST_NAME_BASE-all
 run_ok $TEST_NAME cylc get-config $SUITE_NAME
-cmp_ok $TEST_NAME.stdout - </dev/null
 cmp_ok $TEST_NAME.stderr - </dev/null
 #-------------------------------------------------------------------------------
 TEST_NAME=$TEST_NAME_BASE-section1
 run_ok $TEST_NAME cylc get-config --item=[scheduling] $SUITE_NAME
 cmp_ok $TEST_NAME.stdout - <<__OUT__
 cycling = HoursOfTheDay
-initial cycle time = None
-runahead limit = None
-final cycle time = None
-[queues]
-   [[default]]
+initial cycle time = 
+runahead limit = 
+final cycle time = 
+[[queues]]
+   [[[default]]]
       limit = 0
       members = ops_s1, ops_s2, ops_p1, ops_p2, var_p1, var_p2, var_s1, var_s2
-[special tasks]
-   sequential = 
-   explicit restart outputs = 
+[[special tasks]]
    include at start-up = 
    start-up = 
    one-off = 
+   sequential = 
+   cold-start = 
    clock-triggered = 
    exclude at start-up = 
-   cold-start = 
-[dependencies]
+[[dependencies]]
    graph = OPS:finish-all => VAR
 __OUT__
 cmp_ok $TEST_NAME.stderr - </dev/null
@@ -130,794 +128,833 @@ cmp_ok $TEST_NAME.stderr - </dev/null
 TEST_NAME=$TEST_NAME_BASE-section2
 run_ok $TEST_NAME cylc get-config --item=[runtime] $SUITE_NAME
 cmp_ok $TEST_NAME.stdout - <<'__OUT__'
-[OPS]
-   command scripting = echo "RUN: run-ops.sh"
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = 
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[ops_s1]
-   command scripting = echo "RUN: run-ops.sh"
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = OPS, SERIAL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-      job_type = serial
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[ops_s2]
-   command scripting = echo "RUN: run-ops.sh"
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = OPS, SERIAL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-      job_type = serial
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[ops_p1]
-   command scripting = echo "RUN: run-ops.sh"
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = OPS, PARALLEL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-      job_type = parallel
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[root]
-   command scripting = echo Default command scripting; sleep $(cylc rnd 1 16)
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = 
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[ops_p2]
-   command scripting = echo "RUN: run-ops.sh"
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = OPS, PARALLEL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-      job_type = parallel
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[PARALLEL]
-   command scripting = echo Default command scripting; sleep $(cylc rnd 1 16)
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = 
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-      job_type = parallel
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[VAR]
+[[var_p2]]
    command scripting = echo "RUN: run-var.sh"
    enable resurrection = False
    manual completion = False
    retry delays = 
-   environment scripting = None
+   environment scripting = 
    execution polling intervals = 
-   title = No title provided
+   title = 
    extra log files = 
    work sub-directory = $CYLC_TASK_ID
    submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = 
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
-      reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-   [[dummy mode]]
-      disable pre-command scripting = True
-      disable post-command scripting = True
-      disable retries = True
-      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
-      disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
-      run time range = 1, 16
-      simulate failure = False
-      disable retries = True
-      disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
-      shell = /bin/bash
-      command template = None
-      method = background
-      retry delays = 
-[var_p1]
-   command scripting = echo "RUN: run-var.sh"
-   enable resurrection = False
-   manual completion = False
-   retry delays = 
-   environment scripting = None
-   execution polling intervals = 
-   title = No title provided
-   extra log files = 
-   work sub-directory = $CYLC_TASK_ID
-   submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
    inherit = VAR, PARALLEL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
       reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
       job_type = parallel
-   [[dummy mode]]
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
       disable pre-command scripting = True
       disable post-command scripting = True
       disable retries = True
       command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
       disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
+   [[[outputs]]]
+   [[[simulation mode]]]
       run time range = 1, 16
       simulate failure = False
       disable retries = True
       disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
       shell = /bin/bash
-      command template = None
+      command template = 
       method = background
       retry delays = 
-[var_p2]
-   command scripting = echo "RUN: run-var.sh"
+[[OPS]]
+   command scripting = echo "RUN: run-ops.sh"
    enable resurrection = False
    manual completion = False
    retry delays = 
-   environment scripting = None
+   environment scripting = 
    execution polling intervals = 
-   title = No title provided
+   title = 
    extra log files = 
    work sub-directory = $CYLC_TASK_ID
    submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = VAR, PARALLEL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = 
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
       reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
-      job_type = parallel
-   [[dummy mode]]
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
       disable pre-command scripting = True
       disable post-command scripting = True
       disable retries = True
       command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
       disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
+   [[[outputs]]]
+   [[[simulation mode]]]
       run time range = 1, 16
       simulate failure = False
       disable retries = True
       disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
       shell = /bin/bash
-      command template = None
+      command template = 
       method = background
       retry delays = 
-[var_s1]
-   command scripting = echo "RUN: run-var.sh"
+[[ops_s1]]
+   command scripting = echo "RUN: run-ops.sh"
    enable resurrection = False
    manual completion = False
    retry delays = 
-   environment scripting = None
+   environment scripting = 
    execution polling intervals = 
-   title = No title provided
+   title = 
    extra log files = 
    work sub-directory = $CYLC_TASK_ID
    submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
-   inherit = VAR, SERIAL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = OPS, SERIAL
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
       reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
       job_type = serial
-   [[dummy mode]]
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
       disable pre-command scripting = True
       disable post-command scripting = True
       disable retries = True
       command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
       disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
+   [[[outputs]]]
+   [[[simulation mode]]]
       run time range = 1, 16
       simulate failure = False
       disable retries = True
       disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
       shell = /bin/bash
-      command template = None
+      command template = 
       method = background
       retry delays = 
-[SERIAL]
+[[ops_s2]]
+   command scripting = echo "RUN: run-ops.sh"
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = OPS, SERIAL
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+      job_type = serial
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[ops_p1]]
+   command scripting = echo "RUN: run-ops.sh"
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = OPS, PARALLEL
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+      job_type = parallel
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[ops_p2]]
+   command scripting = echo "RUN: run-ops.sh"
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = OPS, PARALLEL
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+      job_type = parallel
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[var_p1]]
+   command scripting = echo "RUN: run-var.sh"
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = VAR, PARALLEL
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+      job_type = parallel
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[VAR]]
+   command scripting = echo "RUN: run-var.sh"
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = 
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[var_s1]]
+   command scripting = echo "RUN: run-var.sh"
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = VAR, SERIAL
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+      job_type = serial
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[SERIAL]]
    command scripting = echo Default command scripting; sleep $(cylc rnd 1 16)
    enable resurrection = False
    manual completion = False
    retry delays = 
-   environment scripting = None
+   environment scripting = 
    execution polling intervals = 
-   title = No title provided
+   title = 
    extra log files = 
    work sub-directory = $CYLC_TASK_ID
    submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
    inherit = 
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
       reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
       job_type = serial
-   [[dummy mode]]
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
       disable pre-command scripting = True
       disable post-command scripting = True
       disable retries = True
       command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
       disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
+   [[[outputs]]]
+   [[[simulation mode]]]
       run time range = 1, 16
       simulate failure = False
       disable retries = True
       disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
       shell = /bin/bash
-      command template = None
+      command template = 
       method = background
       retry delays = 
-[var_s2]
+[[root]]
+   command scripting = echo Default command scripting; sleep $(cylc rnd 1 16)
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = 
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[PARALLEL]]
+   command scripting = echo Default command scripting; sleep $(cylc rnd 1 16)
+   enable resurrection = False
+   manual completion = False
+   retry delays = 
+   environment scripting = 
+   execution polling intervals = 
+   title = 
+   extra log files = 
+   work sub-directory = $CYLC_TASK_ID
+   submission polling intervals = 
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
+   inherit = 
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
+      reset timer = False
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
+      job_type = parallel
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
+      disable pre-command scripting = True
+      disable post-command scripting = True
+      disable retries = True
+      command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
+      disable task event hooks = True
+   [[[outputs]]]
+   [[[simulation mode]]]
+      run time range = 1, 16
+      simulate failure = False
+      disable retries = True
+      disable task event hooks = True
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
+      shell = /bin/bash
+      command template = 
+      method = background
+      retry delays = 
+[[var_s2]]
    command scripting = echo "RUN: run-var.sh"
    enable resurrection = False
    manual completion = False
    retry delays = 
-   environment scripting = None
+   environment scripting = 
    execution polling intervals = 
-   title = No title provided
+   title = 
    extra log files = 
    work sub-directory = $CYLC_TASK_ID
    submission polling intervals = 
-   description = No description provided
-   initial scripting = None
-   pre-command scripting = None
-   post-command scripting = None
+   description = 
+   initial scripting = 
+   pre-command scripting = 
+   post-command scripting = 
    inherit = VAR, SERIAL
-   [[event hooks]]
-      submission timeout handler = None
-      submitted handler = None
-      started handler = None
-      execution timeout handler = None
-      submission failed handler = None
-      submission retry handler = None
-      warning handler = None
-      succeeded handler = None
-      retry handler = None
+   [[[event hooks]]]
+      submission timeout handler = 
+      submitted handler = 
+      started handler = 
+      execution timeout handler = 
+      submission failed handler = 
+      submission retry handler = 
+      warning handler = 
+      succeeded handler = 
+      retry handler = 
       reset timer = False
-      execution timeout = None
-      failed handler = None
-      submission timeout = None
-   [[environment]]
-   [[directives]]
+      execution timeout = 
+      failed handler = 
+      submission timeout = 
+   [[[environment]]]
+   [[[directives]]]
       job_type = serial
-   [[dummy mode]]
+   [[[environment filter]]]
+      exclude = 
+      include = 
+   [[[dummy mode]]]
       disable pre-command scripting = True
       disable post-command scripting = True
       disable retries = True
       command scripting = echo Dummy command scripting; sleep $(cylc rnd 1 16)
       disable task event hooks = True
-   [[outputs]]
-   [[simulation mode]]
+   [[[outputs]]]
+   [[[simulation mode]]]
       run time range = 1, 16
       simulate failure = False
       disable retries = True
       disable task event hooks = True
-   [[suite state polling]]
-      interval = None
-      run-dir = None
-      max-polls = None
-      host = None
-      owner = None
-      verbose mode = None
-   [[remote]]
-      owner = None
-      suite definition directory = None
-      host = None
-   [[job submission]]
+   [[[suite state polling]]]
+      interval = 
+      host = 
+      max-polls = 
+      run-dir = 
+      user = 
+      verbose mode = 
+   [[[remote]]]
+      owner = 
+      suite definition directory = 
+      host = 
+   [[[job submission]]]
       shell = /bin/bash
-      command template = None
+      command template = 
       method = background
       retry delays = 
 __OUT__

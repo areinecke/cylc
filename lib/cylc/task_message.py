@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -27,9 +27,10 @@ from remote import remrun
 from cylc.passphrase import passphrase
 from cylc.strftime import strftime
 from cylc import cylc_mode
+import cylc.flags
 
 class message(object):
-    def __init__( self, msg=None, priority='NORMAL', verbose=False ):
+    def __init__( self, msg=None, priority='NORMAL' ):
 
         self.msg = msg
 
@@ -41,7 +42,7 @@ class message(object):
         # load the environment
         self.env_map = dict(os.environ)
 
-        # set some instance variables 
+        # set some instance variables
         for attr, key, default in (
                 ('suite', 'CYLC_SUITE_NAME', '(CYLC_SUITE_NAME)'),
                 ('task_id', 'CYLC_TASK_ID', '(CYLC_TASK_ID)'),
@@ -62,8 +63,8 @@ class message(object):
             self.max_tries = int( self.max_tries )
         except:
             pass
- 
-        self.verbose = verbose or self.env_map.get('CYLC_VERBOSE') == 'True'
+
+        cylc.flags.verbose = cylc.flags.verbose or self.env_map.get('CYLC_VERBOSE') == 'True'
 
         # 'scheduler' or 'submit', (or 'raw' if job script run manually)
         self.mode = self.env_map.get( 'CYLC_MODE', 'raw' )
@@ -95,7 +96,7 @@ class message(object):
             for line in open(self.env_file_path):
                 key, value = line.strip().split('=', 1)
                 self.env_map[key] = value
-        # set some instance variables 
+        # set some instance variables
         for attr, key, default in (
                 ('task_id', 'CYLC_TASK_ID', '(CYLC_TASK_ID)'),
                 ('owner', 'CYLC_SUITE_OWNER', None),
@@ -103,7 +104,7 @@ class message(object):
                 ('port', 'CYLC_SUITE_PORT', '(CYLC_SUITE_PORT)')):
             value = self.env_map.get(key, default)
             setattr(self, attr, value)
-           
+
     def now( self ):
         if self.utc:
             return datetime.utcnow()
@@ -113,15 +114,14 @@ class message(object):
     def get_proxy( self ):
         # get passphrase here, not in __init__, because it is not needed
         # on remote task hosts if 'ssh messaging = True' (otherwise, if
-        # it is needed, we will end up in this method). 
+        # it is needed, we will end up in this method).
 
-        self.pphrase = passphrase( self.suite, self.owner, self.host,
-                verbose=self.verbose ).get( None, None )
+        self.pphrase = passphrase( self.suite, self.owner, self.host ).get( None, None )
 
         import cylc_pyro_client
         return cylc_pyro_client.client( self.suite, self.pphrase,
-                self.owner, self.host, self.try_timeout, self.port,
-                self.verbose ).get_proxy( self.task_id )
+                self.owner, self.host, self.try_timeout,
+                self.port ).get_proxy( self.task_id )
 
     def print_msg( self, msg ):
         if self.utc:
@@ -159,13 +159,13 @@ class message(object):
             # The suite definition specified that this task should
             # communicate back to the suite by means of using
             # passwordless ssh to re-invoke the messaging command on the
-            # suite host. 
+            # suite host.
 
             # The remote_run() function expects command line options
             # to identify the target user and host names:
             sys.argv.append( '--user=' + self.owner )
             sys.argv.append( '--host=' + self.host )
-            if self.verbose:
+            if cylc.flags.verbose:
                 sys.argv.append( '-v' )
 
             if self.ssh_login_shell:
@@ -179,8 +179,9 @@ class message(object):
             # re-invoked command on the remote side will not end up in
             # this code block.
             env = {}
-            for var in ['CYLC_MODE', 'CYLC_TASK_ID', 'CYLC_VERBOSE', 
-                    'CYLC_SUITE_DEF_PATH_ON_SUITE_HOST', 
+            for var in ['CYLC_MODE', 'CYLC_TASK_ID', 'CYLC_VERBOSE',
+                    'CYLC_SUITE_DEF_PATH_ON_SUITE_HOST',
+                    'CYLC_SUITE_RUN_DIR',
                     'CYLC_SUITE_NAME', 'CYLC_SUITE_OWNER',
                     'CYLC_SUITE_HOST', 'CYLC_SUITE_PORT', 'CYLC_UTC',
                     'CYLC_TASK_MSG_MAX_TRIES', 'CYLC_TASK_MSG_TIMEOUT',
@@ -197,32 +198,51 @@ class message(object):
                 # Return here if remote re-invocation occurred,
                 # otherwise drop through to local Pyro messaging.
                 # Note: do not sys.exit(0) here as the commands do, it
-                # will cause messaging failures on the remote host. 
+                # will cause messaging failures on the remote host.
                 return
 
         self.print_msg( msg )
         self.send_pyro( msg )
 
-
     def send_pyro( self, msg ):
-        print "Sending message (connection timeout is", str(self.try_timeout) + ") ..."
+        from Pyro.errors import NamingError
         sent = False
         itry = 0
         while True:
             itry += 1
-            print '  ', "Try", itry, "of", str(self.max_tries), "...",  
             try:
                 # Get a proxy for the remote object and send the message.
                 self.load_suite_contact_file() # might have change between tries
                 self.get_proxy().put( self.priority, msg )
+            except NamingError, x:
+                print >> sys.stderr, x
+                print "Send message: try %s of %s failed: %s" % (
+                    itry,
+                    self.max_tries,
+                    x
+                )
+                print "Task proxy removed from suite daemon? Aborting."
+                break
             except Exception, x:
-                print "failed:", str(x)
+                print >> sys.stderr, x
+                print "Send message: try %s of %s failed: %s" % (
+                    itry,
+                    self.max_tries,
+                    x
+                )
                 if itry >= self.max_tries:
                     break
-                print "   retry in", str(self.retry_seconds), "seconds ..."
+                print "   retry in %s seconds, timeout is %s" % (
+                    self.retry_seconds,
+                    self.try_timeout
+                )
                 sleep( self.retry_seconds )
             else:
-                print "succeeded"
+                if itry > 1:
+                    print "Send message: try %s of %s succeeded" % (
+                        itry,
+                        self.max_tries
+                    )
                 sent = True
                 break
         if not sent:
@@ -245,7 +265,7 @@ class message(object):
             self.send()
         self.task_lock( False )
         self.send( self.task_id + ' failed' )
- 
+
     def task_lock( self, acquire=True ):
         # acquire or release a task lock if using the lockserver
         if cylc_mode.mode().is_raw() or self.ssh_messaging:
@@ -260,7 +280,7 @@ class message(object):
                     raise SystemExit( "Failed to release task lock" )
         except Exception, z:
             print >> sys.stderr, z
-            if debug:
+            if cylc.flags.debug:
                 raise
             raise SystemExit( "Failed to connect to the lockserver?" )
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -21,11 +21,11 @@ from cylc.TaskID import TaskID
 import re, os
 import StringIO
 from copy import deepcopy
-from cylc.global_config import get_global_cfg
+from cylc.cfgspec.site import sitecfg
 from cylc.command_env import cv_scripting_ml
 import signal
 from subprocess import Popen, PIPE
-from time import time, sleep 
+from time import time, sleep
 
 class jobfile(object):
 
@@ -53,7 +53,7 @@ class jobfile(object):
         # task runtime environment setup).
         ################################################################
 
-        # Write each job script section in turn. 
+        # Write each job script section in turn.
 
         # Access to cylc must be configured before user environment so
         # that cylc commands can be used in defining user environment
@@ -66,6 +66,7 @@ class jobfile(object):
 
         self.write_prelude()
         self.write_err_trap()
+        self.write_vacation_trap()
 
         self.write_initial_scripting()
 
@@ -182,12 +183,11 @@ class jobfile(object):
             BUFFER.write( "\nexport TZ=UTC" )
 
         # override and write task-host-specific suite variables
-        gcfg = get_global_cfg()
-        suite_work_dir = gcfg.get_derived_host_item( self.suite, 'suite work directory', self.host, self.owner )
+        suite_work_dir = sitecfg.get_derived_host_item( self.suite, 'suite work directory', self.host, self.owner )
         st_env = deepcopy( self.__class__.suite_task_env ) 
-        st_env[ 'CYLC_SUITE_RUN_DIR'    ] = gcfg.get_derived_host_item( self.suite, 'suite run directory', self.host, self.owner )
+        st_env[ 'CYLC_SUITE_RUN_DIR'    ] = sitecfg.get_derived_host_item( self.suite, 'suite run directory', self.host, self.owner )
         st_env[ 'CYLC_SUITE_WORK_DIR'   ] = suite_work_dir
-        st_env[ 'CYLC_SUITE_SHARE_DIR'  ] = gcfg.get_derived_host_item( self.suite, 'suite share directory', self.host, self.owner )
+        st_env[ 'CYLC_SUITE_SHARE_DIR'  ] = sitecfg.get_derived_host_item( self.suite, 'suite share directory', self.host, self.owner )
         st_env[ 'CYLC_SUITE_SHARE_PATH' ] = '$CYLC_SUITE_SHARE_DIR' # DEPRECATED
         rsp = self.jobconfig['remote suite path']
         if rsp:
@@ -200,15 +200,15 @@ class jobfile(object):
 
         task_work_dir  = os.path.join( suite_work_dir, self.jobconfig['work sub-directory'] )
 
-        use_login_shell = gcfg.get_host_item( 'use login shell', self.host, self.owner )
-        comms = gcfg.get_host_item( 'task communication method', self.host, self.owner )
+        use_login_shell = sitecfg.get_host_item( 'use login shell', self.host, self.owner )
+        comms = sitecfg.get_host_item( 'task communication method', self.host, self.owner )
 
         BUFFER.write( "\n\n# CYLC TASK ENVIRONMENT:" )
         BUFFER.write( "\nexport CYLC_TASK_ID=" + self.task_id )
         BUFFER.write( "\nexport CYLC_TASK_NAME=" + self.task_name )
-        BUFFER.write( "\nexport CYLC_TASK_MSG_RETRY_INTVL=" + str( gcfg.cfg['task messaging']['retry interval in seconds']))
-        BUFFER.write( "\nexport CYLC_TASK_MSG_MAX_TRIES=" + str( gcfg.cfg['task messaging']['maximum number of tries']))
-        BUFFER.write( "\nexport CYLC_TASK_MSG_TIMEOUT=" + str( gcfg.cfg['task messaging']['connection timeout in seconds']))
+        BUFFER.write( "\nexport CYLC_TASK_MSG_RETRY_INTVL=" + str( sitecfg.get( ['task messaging','retry interval in seconds'])) )
+        BUFFER.write( "\nexport CYLC_TASK_MSG_MAX_TRIES=" + str( sitecfg.get( ['task messaging','maximum number of tries'])) )
+        BUFFER.write( "\nexport CYLC_TASK_MSG_TIMEOUT=" + str( sitecfg.get( ['task messaging','connection timeout in seconds'])) )
         BUFFER.write( "\nexport CYLC_TASK_IS_COLDSTART=" + str( self.jobconfig['is cold-start']) )
         BUFFER.write( "\nexport CYLC_TASK_CYCLE_TIME=" + self.tag )
         BUFFER.write( "\nexport CYLC_TASK_LOG_ROOT=" + self.log_root )
@@ -217,7 +217,7 @@ class jobfile(object):
         BUFFER.write( "\nexport CYLC_TASK_COMMS_METHOD=" + comms )
         BUFFER.write( "\nexport CYLC_TASK_SSH_LOGIN_SHELL=" + str(use_login_shell) )
         BUFFER.write( "\nexport CYLC_TASK_WORK_DIR=" + task_work_dir )
-        BUFFER.write( "\nexport CYLC_TASK_WORK_PATH=$CYLC_TASK_WORK_DIR") # DEPRECATED 
+        BUFFER.write( "\nexport CYLC_TASK_WORK_PATH=$CYLC_TASK_WORK_DIR") # DEPRECATED
 
     def write_suite_bin_access( self, BUFFER=None ):
         if not BUFFER:
@@ -226,24 +226,25 @@ class jobfile(object):
         BUFFER.write( "\nexport PATH=$CYLC_SUITE_DEF_PATH/bin:$PATH" )
 
     def write_err_trap( self ):
-        """Note that all job-file scripting must be bash- and
-        ksh-compatible, hence use of 'typeset' below instead of the more
-        sensible but bash-specific 'local'."""
+        """Write error trap.
 
+        Note that all job-file scripting must be bash- and ksh-compatible,
+        hence use of "typeset" below instead of the more sensible but
+        bash-specific "local".
+
+        """
         self.FILE.write( r"""
 
-# SET ERROR TRAPPING:
+# TRAP ERROR SIGNALS:
 set -u # Fail when using an undefined variable
-# Define the trap handler
-SIGNALS="EXIT ERR TERM XCPU"
-function HANDLE_TRAP {
+FAIL_SIGNALS='EXIT ERR TERM XCPU'
+TRAP_FAIL_SIGNAL() {
     typeset SIGNAL=$1
-    echo "Received signal $SIGNAL"
+    echo "Received signal $SIGNAL" >&2
     typeset S=
-    for S in $SIGNALS; do
+    for S in ${VACATION_SIGNALS:-} $FAIL_SIGNALS; do
         trap "" $S
     done
-    # SEND TASK FAILED MESSAGE
     if [[ -n ${CYLC_TASK_LOG_ROOT:-} ]]; then
         {
             echo "CYLC_JOB_EXIT=$SIGNAL"
@@ -253,10 +254,43 @@ function HANDLE_TRAP {
     cylc task failed "Task job script received signal $@"
     exit 1
 }
-# Trap signals that could cause this script to exit:
-for S in $SIGNALS; do
-    trap "HANDLE_TRAP $S" $S
-done""")
+for S in $FAIL_SIGNALS; do
+    trap "TRAP_FAIL_SIGNAL $S" $S
+done
+unset S""")
+
+
+    def write_vacation_trap( self ):
+        """Write job vacation trap.
+
+        Note that all job-file scripting must be bash- and ksh-compatible,
+        hence use of "typeset" below instead of the more sensible but
+        bash-specific "local".
+
+        """
+        if self.jobconfig['job vacation signal']:
+            self.FILE.write( r"""
+
+# TRAP VACATION SIGNALS:
+VACATION_SIGNALS='""" + self.jobconfig['job vacation signal'] + r"""'
+TRAP_VACATION_SIGNAL() {
+    typeset SIGNAL=$1
+    echo "Received signal $SIGNAL" >&2
+    typeset S=
+    for S in $VACATION_SIGNALS $FAIL_SIGNALS; do
+        trap "" $S
+    done
+    if [[ -n ${CYLC_TASK_LOG_ROOT:-} && -f $CYLC_TASK_LOG_ROOT.status ]]; then
+        rm -f $CYLC_TASK_LOG_ROOT.status
+    fi
+    cylc task message -p WARNING "Task job script vacated by signal $@"
+    exit 1
+}
+S=
+for S in $VACATION_SIGNALS; do
+    trap "TRAP_VACATION_SIGNAL $S" $S
+done
+unset S""")
 
     def write_task_started( self ):
         self.FILE.write( r"""
@@ -377,8 +411,11 @@ echo ""''')
         self.FILE.write( "\n" + pcs )
 
     def write_command_scripting( self ):
+        cs = self.jobconfig['command scripting']
+        if not cs:
+            return
         self.FILE.write( "\n\n# TASK COMMAND SCRIPTING:" )
-        self.FILE.write( "\n" + self.jobconfig['command scripting'] )
+        self.FILE.write( "\n" + cs )
 
     def write_post_scripting( self ):
         pcs = self.jobconfig['post-command scripting']

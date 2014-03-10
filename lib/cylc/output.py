@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -28,8 +28,8 @@ class outputx(object):
     """
 Hold and process explicit internal task outputs during suite configuration.
 This is for outputs used as outputs, not outputs used as prerequisites. The
-latter can have instrinsic (in message) and evaluation ([T-n]) offsets, but 
-these only have intrinsic offsets - they are always evaluated at the task's 
+latter can have instrinsic (in message) and evaluation ([T-n]) offsets, but
+these only have intrinsic offsets - they are always evaluated at the task's
 own cycle time.
     """
     def __init__(self, msg, cyclr ):
@@ -44,7 +44,7 @@ own cycle time.
             self.offset = int(offset)
 
     def get( self, ctime ):
-        # Replace [T] with actual cycle time 
+        # Replace [T] with actual cycle time
         if self.offset:
             ctime = self.cyclr.offset( ctime, - self.offset )
         return re.sub( '\[\s*T.*?\]', ctime, self.msg )

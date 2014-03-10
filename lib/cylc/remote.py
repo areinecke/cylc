@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
-#C: 
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
+#C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
 #C: the Free Software Foundation, either version 3 of the License, or
@@ -23,12 +23,13 @@ from pipes import quote
 
 from suite_host import is_remote_host
 from owner import is_remote_user
+import flags
 
 class remrun( object ):
     """If owner or host differ from username and localhost, strip the
     remote options from the commandline and reinvoke the command on the
     remote host by passwordless ssh, then exit; else do nothing."""
-    # To ensure that users are aware of remote re-invocation info is 
+    # To ensure that users are aware of remote re-invocation info is
     # always printed, but to stderr so as not to interfere with results.
 
     def __init__( self ):
@@ -36,10 +37,7 @@ class remrun( object ):
         self.host = None
         self.ssh_login_shell = True
 
-        if '-v' in sys.argv or '--verbose' in sys.argv:
-            self.verbose = True
-        else:
-            self.verbose = False
+        flags.verbose == ( '-v' in sys.argv or '--verbose' in sys.argv )
 
         argv = sys.argv[1:]
         self.args = []
@@ -76,7 +74,7 @@ class remrun( object ):
         name = os.path.basename(sys.argv[0])[5:] # /path/to/cylc-foo => foo
 
         user_at_host = ''
-        if self.owner: 
+        if self.owner:
             user_at_host = self.owner  + '@'
         if self.host:
             user_at_host += self.host
@@ -99,13 +97,13 @@ class remrun( object ):
             command += ["--env=%s=%s"%(var,val)]
         for arg in self.args:
             command += ["'"+arg+"'"]
-            # above: args quoted to avoid interpretation by the shell, 
+            # above: args quoted to avoid interpretation by the shell,
             # e.g. for match patterns such as '.*' on the command line.
 
         # ssh command and options (X forwarding)
         command = ["ssh", "-oBatchMode=yes", "-Y", user_at_host] + command
 
-        if self.verbose:
+        if flags.verbose:
             # Wordwrap the command, quoting arguments so they can be run
             # properly from the command line
             print '\n'.join(TextWrapper(subsequent_indent='\t').wrap(' '.join(map(quote,command))))

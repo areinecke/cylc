@@ -1,6 +1,6 @@
 #!/bin/bash
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C: 
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -46,12 +46,18 @@
 #         is set, show differences using xxdiff.
 #     grep_ok PATTERN FILE
 #         Run "grep -q PATTERN FILE".
+#     exists_ok FILE
+#         Test that FILE exists
+#     exists_fail FILE
+#         Test that FILE does not exist
 #     init_suite SUITE_NAME
 #         Create a suite called '__cylc__test__${SUITE_NAME}__' in $TEST_DIR.
 #     purge_suite SUITE_NAME
 #         Tidy up test directories for SUITE_NAME.
-#     skip_tests N SKIP_REASON
-#         echo "ok $((++T)) # skip SKIP_REASON" N times, where the number to skip.
+#     skip N SKIP_REASON
+#         echo "ok $((++T)) # skip SKIP_REASON" N times.
+#     skip_all SKIP_REASON
+#         echo "1..0 # SKIP SKIP_REASON" and exit.
 #-------------------------------------------------------------------------------
 set -eu
 
@@ -67,9 +73,9 @@ function FINALLY() {
         rm -rf $TEST_DIR
     fi
     if (($FAILURES > 0)); then
-        echo -e "\n    stdout and stderr stored in: $TEST_LOG_DIR" > /dev/tty
+        echo -e "\n    stdout and stderr stored in: $TEST_LOG_DIR" >&2
         if $SUITE_RUN_FAILS; then
-            echo -e "    suite logs can be found under: $SUITE_LOG_DIR" > /dev/tty
+            echo -e "    suite logs can be found under: $SUITE_LOG_DIR" >&2
         fi
     fi
 }
@@ -97,7 +103,7 @@ function run_ok() {
     shift 1
     if ! "$@" 1>$TEST_NAME.stdout 2>$TEST_NAME.stderr; then
         fail $TEST_NAME
-        mkdir -p $TMPDIR/cylc-tests/$(basename $TEST_SOURCE_DIR)
+        mkdir -p $TEST_LOG_DIR
         cp $TEST_NAME.stdout $TEST_LOG_DIR/$TEST_NAME.stdout
         cp $TEST_NAME.stderr $TEST_LOG_DIR/$TEST_NAME.stderr
         return
@@ -110,7 +116,7 @@ function run_fail() {
     shift 1
     if "$@" 1>$TEST_NAME.stdout 2>$TEST_NAME.stderr; then
         fail $TEST_NAME
-        mkdir -p $TMPDIR/cylc-tests/$(basename $TEST_SOURCE_DIR)
+        mkdir -p $TEST_LOG_DIR
         cp $TEST_NAME.stdout $TEST_LOG_DIR/$TEST_NAME.stdout
         cp $TEST_NAME.stderr $TEST_LOG_DIR/$TEST_NAME.stderr
         return
@@ -147,7 +153,6 @@ function suite_run_fail() {
     ok $TEST_NAME
 }
 
-
 function cmp_ok() {
     local FILE_TEST=$1
     local FILE_CONTROL=${2:--}
@@ -174,10 +179,30 @@ function grep_ok() {
     fail $TEST_NAME
 }
 
+function exists_ok() {
+    local FILE=$1
+    local TEST_NAME=$(basename $FILE)-file-exists-ok
+    if [[ -a $FILE ]]; then
+        ok $TEST_NAME
+        return
+    fi
+    fail $TEST_NAME
+}
+
+function exists_fail() {
+    local FILE=$1
+    local TEST_NAME=$(basename $FILE)-file-exists-fail
+    if [[ ! -a $FILE ]]; then
+        ok $TEST_NAME
+        return
+    fi
+    fail $TEST_NAME
+}
+
 function init_suite() {
     SNAME=$( echo ${TEST_SOURCE_DIR##*tests/} | tr '/' '_' )
-    SUITE_NAME=$(date -u +%Y%m%d%H%M)_cylc_test_${SNAME}_${1}
-    mkdir $TEST_DIR/$SUITE_NAME/ 
+    SUITE_NAME=$(date -u +%Y%m%d%H%M%S)_cylc_test_${SNAME}_${1}
+    mkdir $TEST_DIR/$SUITE_NAME/
     cat >$TEST_DIR/$SUITE_NAME/suite.rc
     cylc unregister $SUITE_NAME 2>/dev/null
     cylc register $SUITE_NAME $TEST_DIR/$SUITE_NAME 2>/dev/null
@@ -192,7 +217,7 @@ function init_suite() {
 function install_suite() {
     ORIG_SUITE_NAME=$2
     SNAME=$( echo ${TEST_SOURCE_DIR##*tests/} | tr '/' '_' )
-    SUITE_NAME=$(date -u +%Y%m%d%H%M)_cylc_test_${SNAME}_${1}
+    SUITE_NAME=$(date -u +%Y%m%d%H%M%S)_cylc_test_${SNAME}_${1}
     mkdir $TEST_DIR/$SUITE_NAME/
     cp -r $TEST_SOURCE_DIR/${2}/* $TEST_DIR/$SUITE_NAME
     cylc unregister $SUITE_NAME 2>/dev/null
@@ -210,7 +235,7 @@ function purge_suite() {
         SUITE_DIR=$(cylc get-global-config --print-run-dir)/$SUITE_NAME
         while lsof | grep -q $SUITE_DIR; do
             sleep 1
-        done    
+        done
         rm -rf $SUITE_DIR
     fi
     cd $TEST_DIR
@@ -231,6 +256,11 @@ function skip() {
     done
 }
 
+function skip_all() {
+    echo "1..0 # SKIP $@"
+    exit
+}
+
 CYLC_DIR=${CYLC_DIR:-$(cd $(dirname $BASH_SOURCE)/../../.. && pwd)}
 PATH=$CYLC_DIR/bin:$PATH
 
@@ -238,7 +268,11 @@ TEST_NAME_BASE=$(basename $0 .t)
 TEST_SOURCE_DIR=$(cd $(dirname $0) && pwd)
 TEST_DIR=$(mktemp -d)
 cd $TEST_DIR
-TEST_LOG_DIR=$TMPDIR/cylc-tests/$(basename $TEST_SOURCE_DIR)
+TEST_LOG_DIR=${TMPDIR:-/tmp}/cylc-tests/$(basename $TEST_SOURCE_DIR)
 SUITE_RUN_FAILS=false
+
+# these variables should be moved to site/user config:
+export CYLC_TEST_TASK_HOST=${CYLC_TEST_TASK_HOST:-localhost}
+export CYLC_TEST_TASK_OWNER=${CYLC_TEST_TASK_OWNER:-$USER}
 
 set +e

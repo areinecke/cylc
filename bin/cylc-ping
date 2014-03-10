@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
-#C: 
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
+#C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
 #C: the Free Software Foundation, either version 3 of the License, or
@@ -17,7 +17,7 @@
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-if '--use-ssh' in sys.argv[1:]: 
+if '--use-ssh' in sys.argv[1:]:
     sys.argv.remove( '--use-ssh' )
     from cylc.remote import remrun
     if remrun().execute():
@@ -27,16 +27,17 @@ from cylc.CylcOptionParsers import cop
 from cylc.TaskID import TaskID, TaskIDError
 from cylc import cylc_pyro_client
 from cylc.command_prep import prep_pyro
-from cylc.global_config import get_global_cfg
+from cylc.cfgspec.site import sitecfg
+import cylc.flags
 
-parser = cop( """cylc [discover] ping [OPTIONS] ARGS
-    
+parser = cop( """cylc [discovery] ping [OPTIONS] ARGS
+
 If suite REG (or task TASK in it) is running, exit (silently, unless
 -v,--verbose is specified); else print an error message and exit with
 error status. For tasks, success means the task proxy is currently in
 the 'running' state.""",
     pyro=True,
-    argdoc=[('REG', 'Suite name'), 
+    argdoc=[('REG', 'Suite name'),
             ('[TASK]', 'Task NAME'+TaskID.DELIM+'TAG (TAG is cycle time or integer)')])
 
 parser.add_option( "--print-ports",
@@ -46,9 +47,8 @@ parser.add_option( "--print-ports",
 ( options, args ) = parser.parse_args()
 
 if options.print_ports:
-    gcfg = get_global_cfg()
-    base = gcfg.cfg['pyro']['base port']
-    range = gcfg.cfg['pyro']['maximum number of ports']
+    base = sitecfg.get( ['pyro','base port'] )
+    range = sitecfg.get( ['pyro','maximum number of ports'] )
     print base, '<= port <=', base + range
     sys.exit(0)
 
@@ -57,11 +57,11 @@ suite, pphrase = prep_pyro( args[0], options ).execute()
 # cylc ping SUITE
 try:
     proxy = cylc_pyro_client.client( suite, pphrase, options.owner,
-            options.host, options.pyro_timeout, options.port,
-            options.verbose).get_proxy( 'suite-info' )
+            options.host, options.pyro_timeout,
+            options.port ).get_proxy( 'suite-info' )
     proxy.get( 'ping suite' )
 except Exception, x:
-    if options.debug:
+    if cylc.flags.debug:
         raise
     sys.exit(x)
 
@@ -80,7 +80,7 @@ else:
 try:
     result = proxy.get( 'ping task', task_id )
 except Exception,x:
-    if options.debug:
+    if cylc.flags.debug:
         raise
     sys.exit(x)
 

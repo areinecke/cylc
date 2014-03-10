@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ from Queue import Queue
 
 class comqueue( Pyro.core.ObjBase ):
     """Pyro-connected class to queue suite control requests."""
-    
+
     def __init__( self, legal_commands=[] ):
         Pyro.core.ObjBase.__init__(self)
         self.legal = legal_commands

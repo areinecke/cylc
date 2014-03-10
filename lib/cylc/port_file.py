@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,7 +19,8 @@
 import os, sys
 from suite_host import is_remote_host
 from owner import user, is_remote_user
-from global_config import get_global_cfg
+from cfgspec.site import sitecfg
+import flags
 
 """Processes connecting to a running suite must know which port the
 suite server is listening on: at start-up cylc writes the port to
@@ -37,7 +38,7 @@ the user will have to give the port number on the command line."""
 class PortFileError( Exception ):
     """
     Attributes:
-        message - what the problem is. 
+        message - what the problem is.
     """
     def __init__( self, msg ):
         self.msg = msg
@@ -48,13 +49,12 @@ class PortFileExistsError( PortFileError ):
     pass
 
 class port_file( object ):
-    def __init__(self, suite, port, verbose=False):
-        self.verbose = verbose
-        self.suite = suite 
+    def __init__(self, suite, port ):
+        self.suite = suite
 
         # the ports directory is assumed to exist
-        gcfg = get_global_cfg()
-        pdir = gcfg.cfg['pyro']['ports directory']
+
+        pdir = sitecfg.get( ['pyro','ports directory'] )
  
         self.local_path = os.path.join( pdir, suite )
 
@@ -69,17 +69,17 @@ class port_file( object ):
     def write( self ):
         if os.path.exists( self.local_path ):
             raise PortFileExistsError( "ERROR, port file exists: " + self.local_path )
-        if self.verbose:
+        if flags.verbose:
             print "Writing port file:", self.local_path
         try:
             f = open( self.local_path, 'w' )
         except OSError,x:
             raise PortFileError( "ERROR, failed to open port file: " + self.port )
-        f.write( self.port ) 
+        f.write( self.port )
         f.close()
 
     def unlink( self ):
-        if self.verbose:
+        if flags.verbose:
             print "Removing port file:", self.local_path
         try:
             os.unlink( self.local_path )
@@ -88,15 +88,13 @@ class port_file( object ):
             raise PortFileError( "ERROR, cannot remove port file: " + self.local_path )
 
 class port_retriever( object ):
-    def __init__(self, suite, host, owner, verbose=False):
-        self.verbose = verbose
+    def __init__(self, suite, host, owner ):
         self.suite = suite
         self.host = host
         self.owner = owner
         self.locn = None
 
-        gcfg = get_global_cfg()
-        self.local_path = os.path.join( gcfg.cfg['pyro']['ports directory'], suite )
+        self.local_path = os.path.join( sitecfg.get( ['pyro','ports directory'] ), suite )
 
     def get_local( self ):
         self.locn = self.local_path
@@ -109,7 +107,7 @@ class port_retriever( object ):
 
     def get_remote( self ):
         import subprocess
-        target = self.owner + '@' + self.host 
+        target = self.owner + '@' + self.host
         remote_path = self.local_path.replace( os.environ['HOME'], '$HOME' )
         self.locn = target + ':' + remote_path
         ssh = subprocess.Popen( ['ssh', '-oBatchMode=yes', target, 'cat', remote_path],
@@ -124,7 +122,7 @@ class port_retriever( object ):
         return str_port
 
     def get( self ):
-        if self.verbose:
+        if flags.verbose:
             print "Retrieving suite port number..."
 
         if is_remote_host( self.host ) or is_remote_user( self.owner ):
@@ -141,7 +139,7 @@ class port_retriever( object ):
             print >> sys.stderr, "ERROR: bad port file", self.locn
             raise PortFileError( "ERROR, illegal port file content: " + str_port )
 
-        if self.verbose:
+        if flags.verbose:
             print '...', port
 
         return port

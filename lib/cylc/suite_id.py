@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,9 +19,9 @@
 # A minimal Pyro-connected object to allow client programs to identify
 # what suite is running at a given cylc port - by suite name and owner.
 
-# All *other* suite objects should be connected to Pyro via qualified 
+# All *other* suite objects should be connected to Pyro via qualified
 # names: owner.suite.object, to prevent accidental access to the wrong
-# suite. This object, however, should be connected unqualified so that 
+# suite. This object, however, should be connected unqualified so that
 # that same ID method can be called on any active cylc port.
 
 import Pyro.core

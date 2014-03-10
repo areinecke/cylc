@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -248,7 +248,7 @@ are displayed in red.
             s = tb.get_end_iter()
             tv.scroll_to_iter( s, 0 )
         try:
-            f, l = s.backward_search(needle, gtk.TEXT_SEARCH_VISIBLE_ONLY) 
+            f, l = s.backward_search(needle, gtk.TEXT_SEARCH_VISIBLE_ONLY)
         except:
             warning_dialog( '"' + needle + '"' + " not found", self.window ).warn()
         else:

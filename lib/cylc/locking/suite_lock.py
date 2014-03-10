@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -34,8 +34,8 @@ class suite_lock(object):
         # suite config files should specify whether or not a suite is
         # 'exclusive' - i.e. is it possible to run multiple copies (with
         # different registered group names) of the entire suite at
-        # once? 
-        
+        # once?
+
         # GET A NEW CONNECTION WITH EACH REQUEST
         # TODO - OR GET A SINGLE CONNECTION IN INIT
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@ import copy
 
 class conditional_simplifier( object ):
     """A class to simplify logical expressions"""
-    
+
     def __init__( self, expr, clean ):
         self.raw_expression = expr
         self.clean_list = clean
@@ -50,7 +50,7 @@ class conditional_simplifier( object ):
         listified = (" ").join(listified)
         listified = ast.literal_eval(listified)
         return listified
-        
+
     def get_bracketed( self, nest_me ):
         """Nest a list according to any brackets in it"""
         start = 0
@@ -78,7 +78,7 @@ class conditional_simplifier( object ):
         for item in self.clean_list:
             cleaned = self.clean_expr( cleaned, item )
         cleaned = self.flatten_nested_expr( cleaned )
-        return cleaned        
+        return cleaned
 
     def nest_by_oper( self, nest_me, oper ):
         """Nest a list based on a specified logical operation"""
@@ -103,6 +103,12 @@ class conditional_simplifier( object ):
     def clean_expr( self, nested_list, criteria ):
         """Return a list with entries specified by 'critria' removed"""
         cleaned = copy.deepcopy( nested_list )
+        # Make sure that we don't have extraneous nesting.
+        while (isinstance(cleaned, list) and len(cleaned) == 1 and
+               isinstance(cleaned[0], list)):
+            cleaned = cleaned[0]
+
+        # Recurse through the nested list and remove criteria.
         found = None
         if isinstance(cleaned, str) or len(cleaned)==1:
             if cleaned == criteria:
@@ -123,16 +129,16 @@ class conditional_simplifier( object ):
             return cleaned
 
     def format_expr( self, expr ):
-        """Carry out list conversion and nesting of a logical expression in 
-        the correct order.""" 
+        """Carry out list conversion and nesting of a logical expression in
+        the correct order."""
         listified = self.listify( expr )
         bracketed = self.get_bracketed( listified )
         nested_by_and = self.nest_by_oper( bracketed, "&" )
         nested_by_or = self.nest_by_oper( nested_by_and, "|" )
         return nested_by_or
-    
+
     def flatten_nested_expr( self, expr ):
-        """Convert a logical expression in a nested list back to a string""" 
+        """Convert a logical expression in a nested list back to a string"""
         flattened = copy.deepcopy( expr )
         for i in range(0,len(flattened)):
             if isinstance(flattened[i], list):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 import gtk
 import os, re
 import gobject
-from stateview import DotUpdater
+from DotUpdater import DotUpdater
 from gcapture import gcapture_tmpfile
 from cylc import cylc_pyro_client
 from cylc.TaskID import TaskID
@@ -56,7 +56,7 @@ LED suite control interface.
         sw.add( treeview )
 
         main_box.pack_start( sw, expand=True, fill=True )
-        
+
         self.t = DotUpdater( self.cfg, self.updater, treeview,
                              self.info_bar, self.usercfg )
         self.t.start()
@@ -84,7 +84,7 @@ LED suite control interface.
         column_index = treeview.get_columns().index(col)
         if column_index == 0:
             return False
-        
+
         if self.t.is_transposed:
             ctime = self.t.led_headings[column_index]
             name = treeview.get_model().get_value( r_iter, 0 )
@@ -202,7 +202,7 @@ LED suite control interface.
         items.append( self.headings_menu_item )
         self.headings_menu_item.show()
         self.headings_menu_item.connect( 'toggled', self.toggle_headings )
-        
+
         self.group_menu_item = gtk.CheckMenuItem( 'Toggle _Family Grouping' )
         self.group_menu_item.set_active( self.t.should_group_families )
         items.append( self.group_menu_item )
@@ -222,10 +222,11 @@ LED suite control interface.
         self.group_toolbutton.set_active( self.t.should_group_families )
         g_image = gtk.image_new_from_stock( 'group', gtk.ICON_SIZE_SMALL_TOOLBAR )
         self.group_toolbutton.set_icon_widget( g_image )
+        self.group_toolbutton.set_label( "Group" )
         self.group_toolbutton.connect( 'toggled', self.toggle_grouping )
         self._set_tooltip( self.group_toolbutton, "Dot View - Click to group tasks by families" )
         items.append( self.group_toolbutton )
-        
+
         self.filter_entry = EntryTempText()
         self.filter_entry.set_width_chars( 7 )  # Reduce width in toolbar
         self.filter_entry.connect( "activate", self.check_filter_entry )

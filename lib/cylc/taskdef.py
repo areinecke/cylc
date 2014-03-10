@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -15,9 +15,6 @@
 #C:
 #C: You should have received a copy of the GNU General Public License
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-# TO DO : ONEOFF FOLLOWON TASKS: still needed but can now be identified
-# automatically from the dependency graph?
 
 # NOTE on conditional and non-conditional triggers: all plain triggers
 # (for a single task) are held in a single prerequisite object; but one
@@ -36,7 +33,7 @@ from cycle_time import ct
 from cycling import container
 from TaskID import TaskID
 from task_output_logs import logfiles
-from OrderedDict import OrderedDict
+from parsec.OrderedDict import OrderedDict
 
 class Error( Exception ):
     """base class for exceptions in this module."""
@@ -66,6 +63,7 @@ class taskdef(object):
         # some defaults
         self.intercycle = False
         self.intercycle_offset = 0
+        self.sequential = False
         self.cycling = False
         self.asyncid_pattern = None
         self.modifiers = []
@@ -84,7 +82,7 @@ class taskdef(object):
         self.loose_prerequisites = [] # asynchronous tasks
 
         self.name = name
-        self.type = 'free'
+        self.type = 'cycling'
 
     def add_trigger( self, trigger, cycler ):
         if cycler not in self.triggers:
@@ -144,9 +142,7 @@ class taskdef(object):
         # instantiating objects of this particular task class.
         base_types = []
         for foo in self.modifiers + [self.type]:
-            # __import__() keyword args were introduced in Python 2.5
-            #mod = __import__( 'cylc.task_types.' + foo, fromlist=[foo] )
-            mod = __import__( 'cylc.task_types.' + foo, globals(), locals(), [foo] )
+            mod = __import__( 'cylc.task_types.' + foo, fromlist=[foo] )
             base_types.append( getattr( mod, foo ) )
 
         tclass = type( self.name, tuple( base_types), dict())
@@ -162,7 +158,7 @@ class taskdef(object):
         tclass.name = self.name        # TODO - NOT NEEDED, USED class.__name__
         tclass.instance_count = 0
         tclass.upward_instance_count = 0
-       
+
         tclass.rtconfig = self.rtconfig
         tclass.run_mode = self.run_mode
 
@@ -186,6 +182,17 @@ class taskdef(object):
             pp = plain_prerequisites( sself.id, self.ict )
             sp = plain_prerequisites( sself.id, self.ict )
             lp = loose_prerequisites( sself.id, self.ict )
+
+            if self.sequential:
+                # For tasks declared 'sequential' we automatically add a
+                # previous-instance inter-cycle trigger, and adjust the
+                # cleanup cutoff (determined by inter-cycle triggers)
+                # accordingly.
+                pp.add( sself.name + '.' + sself.cycon.prev( sself.c_time ) + ' succeeded' )
+                next_inst_ct = sself.cycon.next( sself.c_time )
+                if int(sself.cleanup_cutoff) < int(next_inst_ct):
+                    sself.cleanup_cutoff = next_inst_ct
+
             for cyc in self.triggers:
                 for trig in self.triggers[ cyc ]:
                     if trig.startup and not startup:
@@ -198,7 +205,13 @@ class taskdef(object):
                     # in which case cyc.valid( at(sself.tag)) will fail.
                     if trig.async_repeating:
                         lp.add( trig.get( tag, cyc ))
-                    else:
+                    elif trig.evaluation_offset is not None:
+                        if self.ict is not None and (int(tag) - int(trig.evaluation_offset)) >= int(self.ict):
+                            if trig.suicide:
+                                sp.add( trig.get( tag, cyc ))
+                            else:
+                                pp.add( trig.get( tag, cyc))
+                    elif trig.evaluation_offset is None:
                         if trig.suicide:
                             sp.add( trig.get( tag, cyc ))
                         else:
@@ -222,7 +235,11 @@ class taskdef(object):
                     cp = conditional_prerequisites( sself.id, self.ict )
                     for label in ctrig:
                         trig = ctrig[label]
-                        cp.add( trig.get( tag, cyc ), label )
+                        if self.ict is not None and trig.evaluation_offset is not None:
+                            cp.add( trig.get( tag, cyc ), label,
+                                    (int(tag) - int(trig.evaluation_offset)) < int(self.ict))
+                        else:
+                            cp.add( trig.get( tag, cyc ), label )
                     cp.set_condition( exp )
                     if ctrig[foo].suicide:
                         sself.suicide_prerequisites.add_requisites( cp )
@@ -265,7 +282,7 @@ class taskdef(object):
             sself.logfiles = logfiles()
             for lfile in self.rtconfig[ 'extra log files' ]:
                 sself.logfiles.add_path( lfile )
- 
+
             # outputs
             sself.outputs = outputs( sself.id )
             for outp in self.outputs:

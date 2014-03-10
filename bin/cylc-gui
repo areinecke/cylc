@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
-#C: 
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
+#C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
 #C: the Free Software Foundation, either version 3 of the License, or
@@ -17,7 +17,7 @@
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-if '--use-ssh' in sys.argv[1:]: 
+if '--use-ssh' in sys.argv[1:]:
     sys.argv.remove( '--use-ssh' )
     from cylc.remote import remrun
     if remrun().execute():
@@ -25,6 +25,7 @@ if '--use-ssh' in sys.argv[1:]:
 
 import os
 from cylc.CylcOptionParsers import cop
+import cylc.flags
 
 sys.path.append(os.path.dirname(os.path.realpath(os.path.abspath(__file__))) + '/../lib')
 sys.path.append(os.path.dirname(os.path.realpath(os.path.abspath(__file__))) + '/../')
@@ -40,23 +41,16 @@ you must currently use --host and/or --user on the gcylc command line.
 
 Available task state color themes are shown under the View menu. To
 customize themes copy $CYLC_DIR/conf/gcylcrc/gcylc.rc.eg to
-$HOME/.cylc/gcylc.rc and follow the instructions in the file.""",
-pyro=True, noforce=True, jset=True, argdoc=[('[REG]', 'Suite name' )])
+$HOME/.cylc/gcylc.rc and follow the instructions in the file.
 
-parser.add_option( "--print-config", 
-        help="Print combined (system + user) gcylc config, and exit.",
-        action="store_true", default=False, dest="prntcfg" )
+To see current configuration settings use "cylc get-gui-config".""",
+pyro=True, noforce=True, jset=True, argdoc=[('[REG]', 'Suite name' )])
 
 ( options, args ) = parser.parse_args()
 
 # import modules that require gtk now, so that a display is not needed
 # just to get command help (e.g. when running make on a post-commit hook
 # on a remote repository).
-
-if options.prntcfg:
-    from cylc.cfgspec.gcylc_spec import print_cfg
-    print_cfg()
-    sys.exit(0)
 
 import gtk
 import warnings
@@ -84,7 +78,7 @@ try:
             options.host, options.port, options.pyro_timeout,
             options.templatevars, options.templatevars_file )
 except Exception, x:
-    if options.debug:
+    if cylc.flags.debug:
         raise
     raise SystemExit(x)
 gtk.main()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -27,15 +27,14 @@ class async_daemon( oneoff, task ):
     may keep running indefinitely, e.g. to watch for incoming
     asynchronous data."""
 
+    is_daemon = True
+
     def process_incoming_message( self, (priority,message) ):
-        # intercept incoming messages and check for a pattern match 
+        # intercept incoming messages and check for a pattern match
 
         # remove the remote event time (or "unknown-time") from the end:
         msg = re.sub( ' at .*$', '', message )
         if re.match( self.asyncid_pattern, msg ):
             self.outputs.add( msg )
         task.process_incoming_message( self, (priority,message) )
-
-    def is_daemon( self ):
-        return True
 

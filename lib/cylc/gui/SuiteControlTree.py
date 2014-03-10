@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 import gtk
 import os, re
 import gobject
-from stateview import TreeUpdater
+from TreeUpdater import TreeUpdater
 from gcapture import gcapture_tmpfile
 from util import EntryTempText
 from warning_dialog import warning_dialog, info_dialog
@@ -48,9 +48,9 @@ Text Treeview suite control interface.
     def get_control_widgets( self ):
         main_box = gtk.VBox()
         main_box.pack_start( self.treeview_widgets(), expand=True, fill=True )
-        
+
         self.tfilt = ''
-        
+
         self.t = TreeUpdater( self.cfg, self.updater, self.ttreeview,
                               self.ttree_paths, self.info_bar, self.usercfg )
         self.t.start()
@@ -73,7 +73,7 @@ Text Treeview suite control interface.
             return True
 
          # Task or family.
-        state = model.get_value(iter, 2 ) 
+        state = model.get_value(iter, 2 )
         if state is not None:
             state = re.sub( r'<.*?>', '', state )
         sres = state not in self.tfilter_states
@@ -141,7 +141,7 @@ Text Treeview suite control interface.
         else:
             if toggle_item != self.group_menu_item:
                 self.group_menu_item.set_active( group_on )
-            self.group_toolbutton.set_active( group_on )            
+            self.group_toolbutton.set_active( group_on )
         self.t.update_gui()
         return False
 
@@ -153,14 +153,14 @@ Text Treeview suite control interface.
 
     def treeview_widgets( self ):
         # Treeview of current suite state, with filtering and sorting.
-        # sorting is handled somewhat manually because the simple method 
+        # sorting is handled somewhat manually because the simple method
         # of interposing a TreeModelSort at the top:
         #   treestore = gtk.TreeStore(str, ...)
-        #   tms = gtk.TreeModelSort( treestore )   #\ 
+        #   tms = gtk.TreeModelSort( treestore )   #\
         #   tmf = tms.filter_new()                 #-- or other way round?
         #   tv = gtk.TreeView()
         #   tv.set_model(tms)
-        # failed to produce correct results (the data displayed was not 
+        # failed to produce correct results (the data displayed was not
         # consistently what should have been displayed given the
         # filtering in use) although the exact same code worked for a
         # liststore.
@@ -172,6 +172,7 @@ Text Treeview suite control interface.
         self.tmodelfilter.set_visible_func(self.visible_cb)
         self.tmodelsort = gtk.TreeModelSort(self.tmodelfilter)
         self.ttreeview = gtk.TreeView()
+        self.ttreeview.set_rules_hint(True)
         self.ttreeview.set_model(self.tmodelsort)
 
         ts = self.ttreeview.get_selection()
@@ -179,13 +180,11 @@ Text Treeview suite control interface.
 
         self.ttreeview.connect( 'button_press_event', self.on_treeview_button_pressed )
         headings = [ None, 'task', 'state', 'message', 'Tsubmit', 'Tstart', 'mean dT', 'ETC' ]
-        bkgcols  = [ None, None,  '#def',  '#fff',    '#def',    '#fff',   '#def',    '#fff']
 
         for n in range(1, len(headings)):
             # Skip first column (cycle time)
             cr = gtk.CellRendererText()
             tvc = gtk.TreeViewColumn( headings[n] )
-            cr.set_property( 'cell-background', bkgcols[n] )
             if n == 2:
                 crp = gtk.CellRendererPixbuf()
                 tvc.pack_start( crp, False )
@@ -258,7 +257,7 @@ Text Treeview suite control interface.
         ctime = treemodel.get_value( iter, 0 )
         name = treemodel.get_value( iter, 1 )
         if ctime == name:
-            # must have clicked on the top level ctime 
+            # must have clicked on the top level ctime
             return
 
         task_id = name + TaskID.DELIM + ctime
@@ -343,21 +342,24 @@ Text Treeview suite control interface.
         expand_button = gtk.ToolButton()
         image = gtk.image_new_from_stock( gtk.STOCK_ADD, gtk.ICON_SIZE_SMALL_TOOLBAR )
         expand_button.set_icon_widget( image )
+        expand_button.set_label( "Expand" )
         self._set_tooltip( expand_button, "Tree View - Expand all" )
         expand_button.connect( 'clicked', lambda x: self.ttreeview.expand_all() )
         items.append( expand_button )
 
         collapse_button = gtk.ToolButton()
         image = gtk.image_new_from_stock( gtk.STOCK_REMOVE, gtk.ICON_SIZE_SMALL_TOOLBAR )
-        collapse_button.set_icon_widget( image )        
+        collapse_button.set_icon_widget( image )
+        collapse_button.set_label( "Collapse" )
         collapse_button.connect( 'clicked', lambda x: self.ttreeview.collapse_all() )
         self._set_tooltip( collapse_button, "Tree View - Collapse all" )
         items.append( collapse_button )
-     
+
         self.group_toolbutton = gtk.ToggleToolButton()
         self.group_toolbutton.set_active( self.t.should_group_families )
         g_image = gtk.image_new_from_stock( 'group', gtk.ICON_SIZE_SMALL_TOOLBAR )
         self.group_toolbutton.set_icon_widget( g_image )
+        self.group_toolbutton.set_label( "Group" )
         self.group_toolbutton.connect( 'toggled', self.toggle_grouping )
         self._set_tooltip( self.group_toolbutton, "Tree View - Click to group tasks by families" )
         items.append( self.group_toolbutton )
@@ -379,7 +381,7 @@ class StandaloneControlTreeApp( ControlTree ):
     def __init__(self, suite, owner, host, port ):
         gobject.threads_init()
         ControlTree.__init__(self, suite, owner, host, port )
- 
+
     def quit_gcapture( self ):
         for gwindow in self.gcapture_windows:
             if not gwindow.quit_already:

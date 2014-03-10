@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -18,23 +18,22 @@
 
 import sys, re
 from task import task
-from nopid import nopid
 
-class async_repeating( nopid, task ):
+class async_repeating( task ):
     """ A repeating asynchronous (no cycle time) task for use in
     processing satellite data or similar. Its prerequisites contain
     a pattern to match the "satellite pass ID" (which is essentially
     arbitrary but must uniquely identify any associated data sets).
-    When matched, the prerequisite is satisfied, the matching ID is 
+    When matched, the prerequisite is satisfied, the matching ID is
     passed to the external task as $ASYNCID (so that it can process
     the pass data) and substituted for <ASYNCID> in its own output
-    messages in order that the ID can be passed on to downstream 
+    messages in order that the ID can be passed on to downstream
     tasks in the same way. The task type has no previous instance
     dependence: it spawns when it first enters the running state,
     to allow parallel processing of successive passes."""
 
     used_outputs = {}
-    
+
     def __init__( self, state, validate = False ):
         # Call this AFTER derived class initialisation.
         # Top level derived classes must define self.id.
@@ -49,7 +48,7 @@ class async_repeating( nopid, task ):
                 self.prerequisites.set_all_satisfied()
         else:
             self.asyncid = 'UNSET'
-        self.env_vars[ 'ASYNCID' ] = self.asyncid 
+        self.env_vars[ 'ASYNCID' ] = self.asyncid
         task.__init__( self, state, validate )
 
     def check_requisites( self ):
@@ -75,11 +74,11 @@ class async_repeating( nopid, task ):
                     if m:
                         (left, right) = m.groups()
                         newout = left + mg + right
-                        oid = self.outputs.not_completed[ output ] 
+                        oid = self.outputs.not_completed[ output ]
                         del self.outputs.not_completed[ output ]
                         self.outputs.not_completed[ newout ] = oid
 
-                        self.env_vars[ 'ASYNCID' ] = mg 
+                        self.env_vars[ 'ASYNCID' ] = mg
                         self.asyncid = mg
 
     def set_requisites( self ):
@@ -89,7 +88,7 @@ class async_repeating( nopid, task ):
         for reqs in self.prerequisites.container:
             if not hasattr( reqs, 'is_loose' ):
                 continue
-            for pre in reqs.labels.keys(): 
+            for pre in reqs.labels.keys():
                 m = re.match( '^(.*)<ASYNCID>(.*)', pre )
                 if m:
                     (left, right) = m.groups()

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
-#C: 
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
+#C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
 #C: the Free Software Foundation, either version 3 of the License, or
@@ -17,7 +17,7 @@
 #C: along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-if '--use-ssh' in sys.argv[1:]: 
+if '--use-ssh' in sys.argv[1:]:
     sys.argv.remove( '--use-ssh' )
     from cylc.remote import remrun
     if remrun().execute():
@@ -28,8 +28,9 @@ from cylc.config import config
 from cylc.CylcOptionParsers import cop
 from cylc.command_prep import prep_pyro
 from cylc.prompt import prompt
+import cylc.flags
 
-parser = cop( """cylc [control] reload [OPTIONS] ARGS 
+parser = cop( """cylc [control] reload [OPTIONS] ARGS
 
 Tell a suite to reload its definition at run time. All settings
 including task definitions, with the exception of suite log
@@ -60,11 +61,11 @@ prompt( 'Reload ' + suite, options.force )
 
 try:
     proxy = cylc_pyro_client.client( suite, pphrase, options.owner,
-            options.host, options.pyro_timeout, options.port,
-            options.verbose ).get_proxy( 'command-interface' )
+            options.host, options.pyro_timeout,
+            options.port ).get_proxy( 'command-interface' )
     result = proxy.put( 'reload suite' )
 except Exception, x:
-    if options.debug:
+    if cylc.flags.debug:
         raise
     sys.exit(x)
 

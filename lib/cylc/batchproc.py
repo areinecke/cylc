@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 
 import sys, re
 import subprocess
+import flags
 
 # Instead of p.wait() below, We could use p.poll() which returns None
 # until process p finishes, after which it returns p's exit status; this
@@ -29,12 +30,11 @@ class batchproc:
         [command, arg1, arg2, ...] via an execute() method. Items are
         added until a batch fills up, then the whole batch is processed
         in parallel and we wait on the whole batch to complete before
-        beginning the next batch.  
+        beginning the next batch.
         Users should do a final call to process() to handle any final
         items in an incomplete batch."""
 
-    def __init__( self, size=1, shell=False, verbose=False ):
-        self.verbose = verbose
+    def __init__( self, size=1, shell=False ):
         self.batchno = 0
         self.items = []
         self.size = int(size)
@@ -55,7 +55,7 @@ class batchproc:
         if len( self.items ) == 0:
             return 0
         self.batchno += 1
-        if self.verbose:
+        if flags.verbose:
             print "  Batch No.", self.batchno
         proc = []
         count = 0
@@ -74,10 +74,10 @@ class batchproc:
                 error_reported = True
                 print '  ERROR reported in Batch', self.batchno, 'member', count
             if stdout != '':
-                if self.verbose or error_reported:
+                if flags.verbose or error_reported:
                     print '    Batch', self.batchno, 'member', count, 'stdout:'
                 for line in re.split( r'\n', stdout ):
-                    if self.verbose or error_reported:
+                    if flags.verbose or error_reported:
                         print '   ', line
                     if re.search( 'SUCCEEDED', line ):
                         n_succeeded += 1

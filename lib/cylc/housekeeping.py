@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 #C: THIS FILE IS PART OF THE CYLC SUITE ENGINE.
-#C: Copyright (C) 2008-2013 Hilary Oliver, NIWA
+#C: Copyright (C) 2008-2014 Hilary Oliver, NIWA
 #C:
 #C: This program is free software: you can redistribute it and/or modify
 #C: it under the terms of the GNU General Public License as published by
@@ -20,11 +20,12 @@ import re, sys, os
 import datetime
 from cycle_time import ct, CycleTimeError
 from batchproc import batchproc
+import flags
 
 class HousekeepingError( Exception ):
     """
     Attributes:
-        message - what the problem is. 
+        message - what the problem is.
     """
     def __init__( self, msg ):
         self.msg = msg
@@ -45,8 +46,8 @@ class config_line:
         before the next is processed.
     """
     legal_ops = [ 'copy', 'move', 'delete' ]
-    def __init__( self, source, match, oper, ctime, offset, dest=None, 
-            verbose=False, debug=False, mode=None, cheap=False ):
+    def __init__( self, source, match, oper, ctime, offset, dest=None,
+            mode=None, cheap=False ):
         self.source = source
         self.match = os.path.expandvars(match)
         self.ctime = ctime
@@ -56,10 +57,8 @@ class config_line:
         except CycleTimeError,x:
             raise HousekeepingError, str(x)
         self.offset = offset
-        self.opern = oper 
+        self.opern = oper
         self.destn = dest
-        self.verbose = verbose
-        self.debug = debug
         self.cheap = cheap
         self.mode = mode
 
@@ -88,7 +87,7 @@ class config_line:
         # check the validity of the source directory
         if not os.path.isdir( self.source ):
             raise HousekeepingError, 'Source directory not found: ' + self.source
- 
+
         # check the validity of the requested housekeeping operation
         if self.opern not in self.__class__.legal_ops:
             raise HousekeepingError, "Illegal operation: " + self.opern
@@ -108,7 +107,7 @@ class config_line:
         foo = ct( self.ctime )
         foo.decrement( hours=self.offset )
         print "CUTOFF:", self.ctime, '-', self.offset, '=', foo.get()
-        batch = batchproc( batchsize, verbose=self.verbose )
+        batch = batchproc( batchsize )
 
         entries=[]
         if re.search( '/\w+', self.match ):
@@ -125,8 +124,8 @@ class config_line:
 
         for entry in entries:
             src_entries += 1
-            item = hkitem( entry, self.match, self.opern, self.ctime, self.offset, 
-                    self.destn, self.mode, self.debug, self.cheap )
+            item = hkitem( entrypath, self.match, self.opern, self.ctime, self.offset,
+                    self.destn, self.mode, self.cheap )
             if not item.matches():
                 not_matched += 1
                 continue
@@ -134,7 +133,7 @@ class config_line:
             item.interpolate_destination()
             actioned += batch.add_or_process( item )
         actioned += batch.process()
- 
+
         print 'MATCHED :', str(matched) + '/' + str(src_entries)
         print 'ACTIONED:', str(actioned) + '/' + str(matched)
 
@@ -142,11 +141,11 @@ class config_file:
     """
         Process a cylc housekeeping config file, line by line.
     """
-    def __init__( self, file, ctime, only=None, excpt=None, 
-            verbose=False, debug=False, mode=None, cheap=False):
+    def __init__( self, file, ctime, only=None, excpt=None,
+            mode=None, cheap=False):
         self.lines = []
         if not os.path.isfile( file ):
-            raise HousekeepingError, "file not found: " + file 
+            raise HousekeepingError, "file not found: " + file
 
         print "Parsing housekeeping config file", os.path.abspath( file )
         sys.stdout.flush()
@@ -173,7 +172,7 @@ class config_file:
                 varname=m.group(1)
                 varvalue=m.group(2)
                 os.environ[varname] = os.path.expandvars( varvalue )
-                if verbose:
+                if flags.verbose:
                     print 'Defining variable: ', varname, '=', varvalue
                 continue
 
@@ -207,9 +206,9 @@ class config_file:
                 print "\n   *** SKIPPING " + line
                 continue
 
-            self.lines.append( config_line( source, match, operation, 
-                ctime, offset, destination, 
-                verbose=verbose, debug=debug, mode=mode, cheap=cheap ))
+            self.lines.append( config_line( source, match, operation,
+                ctime, offset, destination,
+                mode=mode, cheap=cheap ))
 
     def action( self, batchsize ):
         for item in self.lines:
@@ -219,7 +218,7 @@ class hkitem:
     """
         Handle processing of a single source directory entry
     """
-    def __init__( self, path, pattern, operation, ctime, offset, destn, mode=None, debug=False, cheap=False ):
+    def __init__( self, path, pattern, operation, ctime, offset, destn, mode=None, cheap=False ):
         # Assumes the validity of pattern has already been checked
         self.operation = operation
         self.path = path
@@ -228,22 +227,21 @@ class hkitem:
         self.offset = offset
         self.destn = destn
         self.matched_ctime = None
-        self.debug = debug
         self.cheap = cheap
         self.mode = mode
 
     def matches( self ):
-        if self.debug:
+        if flags.debug:
             print "\nSource item:", self.path
 
         # does path match pattern
         m = re.search( self.pattern, self.path )
         if not m:
-            if self.debug:
+            if flags.debug:
                 print " + does not match"
             return False
 
-        if self.debug:
+        if flags.debug:
             print " + MATCH"
 
         # extract cycle time from path
@@ -273,11 +271,11 @@ class hkitem:
         try:
             ct(self.matched_ctime)
         except:
-            if self.debug:
+            if flags.debug:
                 print " + extracted cycle time is NOT VALID: " + self.matched_ctime
             return False
         else:
-            if self.debug:
+            if flags.debug:
                 print " + extracted cycle time: " + self.matched_ctime
 
         # assume ctime is >= self.matched_ctime
@@ -286,14 +284,14 @@ class hkitem:
         # gap hours
         gap = foo.subtract_hrs( bar )
 
-        if self.debug:
+        if flags.debug:
             print " + computed offset hours", gap,
         if int(gap) < int(self.offset):
-            if self.debug:
+            if flags.debug:
                 print "- ignoring (does not make the cutoff)"
             return False
-        
-        if self.debug:
+
+        if flags.debug:
             print "- ACTIONABLE (does make the cutoff)"
         return True
 
@@ -310,13 +308,13 @@ class hkitem:
             dest = re.sub( 'MM', self.matched_ctime[4:6], dest )
             dest = re.sub( 'DD', self.matched_ctime[6:8], dest )
             dest = re.sub( 'HH', self.matched_ctime[8:10], dest )
-            if self.debug and dest != self.destn:
+            if flags.debug and dest != self.destn:
                 print " + expanded destination directory:\n  ", dest
             self.destn = dest
 
     def execute( self ):
         # construct the command to execute
-        command = os.path.join( os.environ['CYLC_DIR'], 'bin', '__hk_' + self.operation ) 
+        command = os.path.join( os.environ['CYLC_DIR'], 'bin', '__hk_' + self.operation )
         # ... as a list, for the subprocess module
         comlist = [ command ]
 
